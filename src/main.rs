@@ -3,6 +3,7 @@
 use eframe::egui;
 use rust_yt::playlist::{fetch_playlist_info, PlaylistInfo, VideoEntry};
 use rust_yt::downloader::{download_video, DownloadConfig, DownloadFormat, DownloadStatus};
+use rust_yt::config::AppConfig;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use std::path::PathBuf;
@@ -14,7 +15,8 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([600.0, 500.0])
-            .with_resizable(true),
+            .with_resizable(true)
+            .with_icon(load_icon()),
         ..Default::default()
     };
     
@@ -27,6 +29,24 @@ fn main() -> eframe::Result<()> {
             Ok(Box::new(MyApp::default()))
         }),
     )
+}
+
+fn load_icon() -> eframe::egui::IconData {
+    let (icon_rgba, icon_width, icon_height) = {
+        let icon = include_bytes!("../assets/icon.ico");
+        let image = image::load_from_memory(icon)
+            .expect("Failed to open icon path")
+            .into_rgba8();
+        let (width, height) = image.dimensions();
+        let rgba = image.into_raw();
+        (rgba, width, height)
+    };
+    
+    eframe::egui::IconData {
+        rgba: icon_rgba,
+        width: icon_width,
+        height: icon_height,
+    }
 }
 
 fn setup_custom_fonts(ctx: &egui::Context) {
@@ -70,7 +90,7 @@ enum AppState {
 }
 
 struct MyApp {
-    download_dir: PathBuf, // [NEW] 저장 경로
+    download_dir: PathBuf, // 저장 경로
     url: String,
     format: DownloadFormat,
     state: AppState,
@@ -86,11 +106,14 @@ struct MyApp {
     // 비동기 통신
     tx_ui: Sender<UiMessage>,
     rx_ui: Receiver<UiMessage>,
-    stop_tx: Option<Sender<()>>, // [NEW] 중지 신호 송신
+    stop_tx: Option<Sender<()>>,
     
     // 초기화 상태 표시용
     init_status: String,
     init_progress: f32,
+    
+    // 설정 저장 시 경로 설정 건너뛰기
+    skip_set_path: bool,
 }
 
 enum UiMessage {
@@ -103,8 +126,21 @@ impl Default for MyApp {
     fn default() -> Self {
         let (tx, rx) = channel();
 
-        // [NEW] 초기화 스레드 시작
+        // 저장된 설정 로드
+        let saved_config = AppConfig::load();
+        let initial_dir = saved_config.download_dir.clone().unwrap_or_default();
+        let initial_format = AppConfig::string_to_format(&saved_config.format);
+        
+        // 저장된 경로가 있으면 SetPath 단계 건너뛰기
+        let _initial_state = if saved_config.download_dir.is_some() {
+            AppState::Input
+        } else {
+            AppState::Initializing
+        };
+
+        // [초기화 스레드 시작]
         let tx_clone = tx.clone();
+        let has_saved_path = saved_config.download_dir.is_some();
         thread::spawn(move || {
             let (init_tx, init_rx) = channel();
             
@@ -115,18 +151,31 @@ impl Default for MyApp {
 
             // UI로 상태 전달
             while let Ok(status) = init_rx.recv() {
-                // UI가 닫히면 송신 실패할 수 있음
-                if tx_clone.send(UiMessage::InitStatus(status)).is_err() {
+                // 저장된 경로가 있으면 Completed 시 Input으로 직행
+                let modified_status = if has_saved_path {
+                    if let rust_yt::initializer::InitStatus::Completed = &status {
+                        // Completed 상태는 그대로 전달 (이미 initial_state가 Input임)
+                    }
+                    status
+                } else {
+                    status
+                };
+                
+                if tx_clone.send(UiMessage::InitStatus(modified_status)).is_err() {
                     break;
                 }
             }
         });
 
         Self {
-            download_dir: PathBuf::new(), // 초기화
+            download_dir: initial_dir,
             url: String::new(),
-            format: DownloadFormat::Mp3,
-            state: AppState::Initializing, // [NEW] 시작 상태 변경
+            format: initial_format,
+            state: if saved_config.download_dir.is_some() { 
+                AppState::Initializing // 초기화 후 Input으로
+            } else {
+                AppState::Initializing
+            },
             playlist_info: None,
             error_msg: None,
             download_queue: Vec::new(),
@@ -138,6 +187,7 @@ impl Default for MyApp {
             stop_tx: None,
             init_status: "초기화 준비 중...".to_string(),
             init_progress: 0.0,
+            skip_set_path: saved_config.download_dir.is_some(),
         }
     }
 }
@@ -254,7 +304,11 @@ impl eframe::App for MyApp {
                             self.init_progress = 1.0; // 인디터미네이트로 쓸 수도 있음
                         }
                         rust_yt::initializer::InitStatus::Completed => {
-                            self.state = AppState::SetPath;
+                            if self.skip_set_path {
+                                self.state = AppState::Input;
+                            } else {
+                                self.state = AppState::SetPath;
+                            }
                         }
                         rust_yt::initializer::InitStatus::Failed(e) => {
                             self.error_msg = Some(format!("초기화 실패: {}", e));
@@ -356,8 +410,15 @@ impl eframe::App for MyApp {
                     ui.add_space(20.0);
                     if ui.button("폴더 선택하기").clicked() {
                          if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                            self.download_dir = path;
+                            self.download_dir = path.clone();
                             self.state = AppState::Input;
+                            // 설정 저장
+                            let config = AppConfig {
+                                download_dir: Some(path),
+                                format: AppConfig::format_to_string(&self.format),
+                                audio_quality: "320K".to_string(),
+                            };
+                            let _ = config.save();
                         }
                     }
                 });
@@ -376,7 +437,14 @@ impl eframe::App for MyApp {
                 ui.label(format!("저장 위치: {}", self.download_dir.display()));
                 if ui.button("변경").clicked() {
                     if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                        self.download_dir = path;
+                        self.download_dir = path.clone();
+                        // 설정 저장
+                        let config = AppConfig {
+                            download_dir: Some(path),
+                            format: AppConfig::format_to_string(&self.format),
+                            audio_quality: "320K".to_string(),
+                        };
+                        let _ = config.save();
                     }
                 }
             });
@@ -400,6 +468,7 @@ impl eframe::App for MyApp {
             // 형식 선택
             ui.horizontal(|ui| {
                 ui.label("형식:");
+                let prev_format = self.format.clone();
                 egui::ComboBox::from_id_salt("format_combo")
                     .selected_text(match self.format {
                         DownloadFormat::Mp3 => "🎵 Audio (MP3)",
@@ -418,6 +487,16 @@ impl eframe::App for MyApp {
                         ui.selectable_value(&mut self.format, DownloadFormat::Mp4, "🎬 Video (MP4)");
                         ui.selectable_value(&mut self.format, DownloadFormat::Webm, "🎬 Video (WEBM)");
                     });
+                
+                // 포맷 변경 시 설정 저장
+                if prev_format != self.format {
+                    let config = AppConfig {
+                        download_dir: Some(self.download_dir.clone()),
+                        format: AppConfig::format_to_string(&self.format),
+                        audio_quality: "320K".to_string(),
+                    };
+                    let _ = config.save();
+                }
             });
 
              // 로딩 상태 (Top Panel에 표시)
