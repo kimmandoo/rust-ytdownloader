@@ -60,6 +60,7 @@ fn setup_custom_fonts(ctx: &egui::Context) {
 
 #[derive(Debug)]
 enum AppState {
+    Initializing, // [NEW] 초기화 (다운로드 등)
     SetPath, // [NEW] 초기 경로 설정
     Input,
     Analyzing,
@@ -86,9 +87,14 @@ struct MyApp {
     tx_ui: Sender<UiMessage>,
     rx_ui: Receiver<UiMessage>,
     stop_tx: Option<Sender<()>>, // [NEW] 중지 신호 송신
+    
+    // 초기화 상태 표시용
+    init_status: String,
+    init_progress: f32,
 }
 
 enum UiMessage {
+    InitStatus(rust_yt::initializer::InitStatus),
     AnalysisDone(Result<PlaylistInfo, String>),
     DownloadProgress(DownloadStatus),
 }
@@ -96,11 +102,31 @@ enum UiMessage {
 impl Default for MyApp {
     fn default() -> Self {
         let (tx, rx) = channel();
+
+        // [NEW] 초기화 스레드 시작
+        let tx_clone = tx.clone();
+        thread::spawn(move || {
+            let (init_tx, init_rx) = channel();
+            
+            // 실제 초기화 작업 수행 (별도 스레드)
+            thread::spawn(move || {
+                rust_yt::initializer::init_dependencies(init_tx);
+            });
+
+            // UI로 상태 전달
+            while let Ok(status) = init_rx.recv() {
+                // UI가 닫히면 송신 실패할 수 있음
+                if tx_clone.send(UiMessage::InitStatus(status)).is_err() {
+                    break;
+                }
+            }
+        });
+
         Self {
             download_dir: PathBuf::new(), // 초기화
             url: String::new(),
             format: DownloadFormat::Mp3,
-            state: AppState::SetPath, // [NEW] 시작 상태 변경
+            state: AppState::Initializing, // [NEW] 시작 상태 변경
             playlist_info: None,
             error_msg: None,
             download_queue: Vec::new(),
@@ -110,6 +136,8 @@ impl Default for MyApp {
             tx_ui: tx,
             rx_ui: rx,
             stop_tx: None,
+            init_status: "초기화 준비 중...".to_string(),
+            init_progress: 0.0,
         }
     }
 }
@@ -211,6 +239,30 @@ impl eframe::App for MyApp {
         // 메시지 처리
         while let Ok(msg) = self.rx_ui.try_recv() {
             match msg {
+                UiMessage::InitStatus(status) => {
+                    match status {
+                        rust_yt::initializer::InitStatus::Starting(msg) => {
+                            self.init_status = msg;
+                            self.init_progress = 0.0;
+                        }
+                        rust_yt::initializer::InitStatus::Downloading(p, msg) => {
+                            self.init_progress = (p / 100.0) as f32;
+                            self.init_status = format!("다운로드 중: {} ({:.1}%)", msg, p);
+                        }
+                        rust_yt::initializer::InitStatus::Extracting(msg) => {
+                            self.init_status = msg;
+                            self.init_progress = 1.0; // 인디터미네이트로 쓸 수도 있음
+                        }
+                        rust_yt::initializer::InitStatus::Completed => {
+                            self.state = AppState::SetPath;
+                        }
+                        rust_yt::initializer::InitStatus::Failed(e) => {
+                            self.error_msg = Some(format!("초기화 실패: {}", e));
+                            // 실패해도 일단 진행? 아니면 재시도? 일단 진행시켜서 수동 설정 유도하거나 에러 표시
+                            self.state = AppState::SetPath; 
+                        }
+                    }
+                }
                 UiMessage::AnalysisDone(result) => {
                     match result {
                         Ok(info) => {
@@ -259,6 +311,38 @@ impl eframe::App for MyApp {
                     }
                 }
             }
+        }
+
+        // -1. 초기화 화면
+        if matches!(self.state, AppState::Initializing) {
+             // 렌더링 루프 초기에 한 번만 실행되도록 플래그를 쓰거나, 
+             // 생성자에서 스레드를 띄우는 게 낫지만 eframe 특성상 여기서 띄우기도 가능.
+             // 하지만 매 프레임 실행되면 안됨.
+             // MyApp 구조체에 `init_started` 필드를 두거나, 
+             // tx/rx가 있으므로 생성자에서 그냥 띄우는게 낫다. 
+             // -> 생성자에서는 self.tx_ui를 클론해서 넘겨주기가 까다로울 수 있음 (Channel은 되지만)
+             // 여기서는 간단히 "한 번만 실행" 로직을 넣기보다,
+             // MyApp::default()가 호출될 때 thread를 띄우는게 정석.
+             // 하지만 MyApp::default는 &self가 아니라서 필드 접근 불가.
+             // setup_custom_fonts 호출하는 closure 안에서 
+             // MyApp 생성 후, 거기서 띄우는 방법. 
+             // 일단 여기서는 꼼수로... static flag나 Option check?
+             // 아님 그냥 별도 함수 start_init() 만들어서 생성자에서 호출? 
+             // -> 생성자에서 호출하자.
+             
+             egui::CentralPanel::default().show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(100.0);
+                    ui.heading("🚀 초기 설정 중...");
+                    ui.add_space(20.0);
+                    ui.spinner();
+                    ui.add_space(20.0);
+                    ui.label(&self.init_status);
+                    ui.add_space(10.0);
+                    ui.add(egui::ProgressBar::new(self.init_progress).animate(true));
+                });
+            });
+            return;
         }
 
         // 0. 초기 경로 설정 화면

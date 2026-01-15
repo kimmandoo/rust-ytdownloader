@@ -19,5 +19,5 @@ image = { version = "0.25.9", features = ["jpeg", "png", "webp"] }
 
 
 [lib]
-name = "rust_ytdownloader"
+name = "rust_yt"
 path = "src/lib.rs"
