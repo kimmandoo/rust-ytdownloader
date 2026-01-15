@@ -13,11 +13,14 @@ pub enum InitStatus {
     Failed(String),
 }
 
+// Assuming ValidatedResult is defined elsewhere, e.g., type ValidatedResult<T> = Result<T, String>;
+type ValidatedResult<T> = Result<T, String>;
+
 pub fn init_dependencies(tx: std::sync::mpsc::Sender<InitStatus>) {
     let app_dir = get_app_dir();
     if !app_dir.exists() {
         if let Err(e) = fs::create_dir_all(&app_dir) {
-            let _ = tx.send(InitStatus::Failed(format!("폴더 생성 실패: {}", e)));
+            let _ = tx.send(InitStatus::Failed(rust_i18n::t!("initialization.folder_error", error = e.to_string()).to_string()));
             return;
         }
     }
@@ -26,7 +29,7 @@ pub fn init_dependencies(tx: std::sync::mpsc::Sender<InitStatus>) {
     let ytdlp_path = get_ytdlp_path(&app_dir);
     if !ytdlp_path.exists() {
         if let Err(e) = download_ytdlp(&app_dir, &tx) {
-            let _ = tx.send(InitStatus::Failed(format!("yt-dlp 다운로드 실패: {}", e)));
+            let _ = tx.send(InitStatus::Failed(rust_i18n::t!("initialization.ytdlp_download_fail", error = e).to_string()));
             return;
         }
     }
@@ -35,34 +38,34 @@ pub fn init_dependencies(tx: std::sync::mpsc::Sender<InitStatus>) {
     let ffmpeg_path = get_ffmpeg_path(&app_dir);
     if !ffmpeg_path.exists() {
         if let Err(e) = download_ffmpeg(&app_dir, &tx) {
-            let _ = tx.send(InitStatus::Failed(format!("ffmpeg 다운로드 실패: {}", e)));
+            let _ = tx.send(InitStatus::Failed(rust_i18n::t!("initialization.ffmpeg_download_fail", error = e).to_string()));
             return;
         }
     }
 
     // 3. Update Check (Non-fatal)
     // yt-dlp 업데이트 확인
-    let _ = tx.send(InitStatus::Starting("yt-dlp 업데이트 확인 중...".to_string()));
+    let _ = tx.send(InitStatus::Starting(rust_i18n::t!("initialization.ytdlp_update_check").to_string()));
     match update_ytdlp(&ytdlp_path) {
         Ok(msg) => {
             let _ = tx.send(InitStatus::Starting(format!("yt-dlp: {}", msg)));
             std::thread::sleep(std::time::Duration::from_millis(1500));
         }
         Err(e) => {
-            let _ = tx.send(InitStatus::Starting(format!("yt-dlp 업데이트 실패 (건너뜀): {}", e)));
+            let _ = tx.send(InitStatus::Starting(rust_i18n::t!("initialization.ytdlp_update_fail", error = e).to_string()));
             std::thread::sleep(std::time::Duration::from_millis(1500));
         }
     }
 
     // ffmpeg 작동 확인
-    let _ = tx.send(InitStatus::Starting("ffmpeg 작동 확인 중...".to_string()));
+    let _ = tx.send(InitStatus::Starting(rust_i18n::t!("initialization.ffmpeg_check").to_string()));
     match check_ffmpeg(&ffmpeg_path) {
         Ok(msg) => {
             let _ = tx.send(InitStatus::Starting(format!("ffmpeg: {}", msg)));
             std::thread::sleep(std::time::Duration::from_millis(1500));
         }
         Err(e) => {
-            let _ = tx.send(InitStatus::Starting(format!("ffmpeg 확인 실패 (건너뜀): {}", e)));
+            let _ = tx.send(InitStatus::Starting(rust_i18n::t!("initialization.ffmpeg_check_fail", error = e).to_string()));
             std::thread::sleep(std::time::Duration::from_millis(1500));
         }
     }
@@ -151,7 +154,7 @@ fn download_file(url: &str, dest: &Path, tx: &std::sync::mpsc::Sender<InitStatus
     use backoff::{ExponentialBackoff, retry};
     use std::time::Duration;
 
-    let _ = tx.send(InitStatus::Starting(format!("{} 다운로드 준비...", filename)));
+    let _ = tx.send(InitStatus::Starting(rust_i18n::t!("initialization.downloading_prep", file = filename).to_string()));
     
     // 타임아웃 설정된 클라이언트 생성
     let client = reqwest::blocking::Client::builder()
@@ -174,12 +177,12 @@ fn download_file(url: &str, dest: &Path, tx: &std::sync::mpsc::Sender<InitStatus
 
     // 재시도 로직으로 HTTP 요청
     let response = retry(backoff, || {
-        let _ = tx_clone.send(InitStatus::Starting(format!("{} 다운로드 시도 중...", filename_owned)));
+        let _ = tx_clone.send(InitStatus::Starting(rust_i18n::t!("initialization.downloading_attempt", file = filename_owned).to_string()));
         
         client.get(&url_owned)
             .send()
             .map_err(|e| {
-                let _ = tx_clone.send(InitStatus::Starting(format!("{} 재시도 중...", filename_owned)));
+                let _ = tx_clone.send(InitStatus::Starting(rust_i18n::t!("initialization.downloading_retry", file = filename_owned).to_string()));
                 backoff::Error::transient(e)
             })
             .and_then(|resp| {
@@ -191,7 +194,7 @@ fn download_file(url: &str, dest: &Path, tx: &std::sync::mpsc::Sender<InitStatus
                     ))
                 }
             })
-    }).map_err(|e| format!("다운로드 실패 (재시도 후): {}", e))?;
+    }).map_err(|e| rust_i18n::t!("initialization.download_failed_retry", error = e).to_string())?;
 
     let total_size = response.content_length().unwrap_or(0);
     let mut file = fs::File::create(dest).map_err(|e| e.to_string())?;
@@ -242,7 +245,7 @@ fn download_ytdlp(app_dir: &Path, tx: &std::sync::mpsc::Sender<InitStatus>) -> V
 }
 
 fn download_ffmpeg(app_dir: &Path, tx: &std::sync::mpsc::Sender<InitStatus>) -> ValidatedResult<()> {
-    let _ = tx.send(InitStatus::Starting("ffmpeg 확인 중...".to_string()));
+    let _ = tx.send(InitStatus::Starting(rust_i18n::t!("initialization.ffmpeg_check").to_string()));
 
     #[cfg(target_os = "linux")]
     let (url, archive_name) = (
@@ -271,7 +274,7 @@ fn download_ffmpeg(app_dir: &Path, tx: &std::sync::mpsc::Sender<InitStatus>) -> 
     
     download_file(url, &archive_path, tx, "ffmpeg archive")?;
 
-    let _ = tx.send(InitStatus::Extracting("ffmpeg 압축 해제 중...".to_string()));
+    let _ = tx.send(InitStatus::Extracting(rust_i18n::t!("initialization.extracting", file = "ffmpeg").to_string()));
 
     if archive_name.ends_with(".zip") {
         let file = fs::File::open(&archive_path).map_err(|e| e.to_string())?;
@@ -329,4 +332,4 @@ fn download_ffmpeg(app_dir: &Path, tx: &std::sync::mpsc::Sender<InitStatus>) -> 
     Ok(())
 }
 
-type ValidatedResult<T> = Result<T, String>;
+

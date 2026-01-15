@@ -8,6 +8,8 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use std::path::PathBuf;
 
+rust_i18n::i18n!("locales");
+
 fn main() -> eframe::Result<()> {
     // 폰트 설정 (임베디드 폰트)
     // 윈도우/리눅스 모두에서 한글 깨짐을 방지하기 위해 폰트를 바이너리에 포함
@@ -52,28 +54,41 @@ fn load_icon() -> eframe::egui::IconData {
 fn setup_custom_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
 
-    // NanumGothic.ttf를 바이너리에 포함 (컴파일 시점에 assets/fonts/NanumGothic.ttf가 있어야 함)
-    // src/main.rs 기준이므로 ../assets 가 맞음
+    // 1. Font Data Loaded
     fonts.font_data.insert(
         "NanumGothic".to_owned(),
         std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
             "../assets/fonts/NanumGothic.ttf"
         ))),
     );
+    fonts.font_data.insert(
+        "NotoSansJP".to_owned(),
+        std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
+            "../assets/fonts/NotoSansCJKjp-Regular.otf"
+        ))),
+    );
+    fonts.font_data.insert(
+        "NotoSansSC".to_owned(),
+        std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
+            "../assets/fonts/NotoSansCJKsc-Regular.otf"
+        ))),
+    );
 
-    // Proportional 폰트의 최우선 순위로 설정
-    fonts
-        .families
-        .entry(egui::FontFamily::Proportional)
-        .or_default()
-        .insert(0, "NanumGothic".to_owned());
+    // 2. Proportional Priority: Nanum > JP > SC > Default
+    // `insert(0, ...)` prepends. To get A, B, C order, we can insert C, then B, then A.
+    // Or insert A at 0, B at 1, C at 2.
+    // Default likely has stuff.
+    
+    let proportional = fonts.families.entry(egui::FontFamily::Proportional).or_default();
+    proportional.insert(0, "NanumGothic".to_owned());
+    proportional.insert(1, "NotoSansJP".to_owned());
+    proportional.insert(2, "NotoSansSC".to_owned());
 
-    // Monospace 폰트의 최우선 순위로 설정 (선택사항)
-    fonts
-        .families
-        .entry(egui::FontFamily::Monospace)
-        .or_default()
-        .insert(0, "NanumGothic".to_owned());
+    // 3. Monospace Priority: Nanum > JP > SC > Default
+    let monospace = fonts.families.entry(egui::FontFamily::Monospace).or_default();
+    monospace.insert(0, "NanumGothic".to_owned());
+    monospace.insert(1, "NotoSansJP".to_owned());
+    monospace.insert(2, "NotoSansSC".to_owned());
 
     ctx.set_fonts(fonts);
 }
@@ -122,12 +137,21 @@ enum UiMessage {
     DownloadProgress(DownloadStatus),
 }
 
-impl Default for MyApp {
+    impl Default for MyApp {
     fn default() -> Self {
         let (tx, rx) = channel();
 
         // 저장된 설정 로드
         let saved_config = AppConfig::load();
+        
+        // 언어 설정 적용
+        let locale = if saved_config.language == "auto" {
+            sys_locale::get_locale().unwrap_or_else(|| "en".to_string())
+        } else {
+            saved_config.language.clone()
+        };
+        rust_i18n::set_locale(&locale);
+
         let initial_dir = saved_config.download_dir.clone().unwrap_or_default();
         let initial_format = AppConfig::string_to_format(&saved_config.format);
         
@@ -185,7 +209,7 @@ impl Default for MyApp {
             tx_ui: tx,
             rx_ui: rx,
             stop_tx: None,
-            init_status: "초기화 준비 중...".to_string(),
+            init_status: rust_i18n::t!("initialization.preparing").to_string(),
             init_progress: 0.0,
             skip_set_path: saved_config.download_dir.is_some(),
         }
@@ -207,7 +231,7 @@ impl MyApp {
     }
 
     fn start_download(&mut self) -> Result<(), String> {
-        let info = self.playlist_info.as_ref().ok_or("정보 없음")?;
+        let info = self.playlist_info.as_ref().ok_or(rust_i18n::t!("main.need_analysis").to_string())?;
         
         // 선택된 영상만 필터링
         self.download_queue = info.entries.iter()
@@ -216,7 +240,7 @@ impl MyApp {
             .collect();
             
         if self.download_queue.is_empty() {
-            return Err("선택된 영상이 없습니다.".to_string());
+            return Err(rust_i18n::t!("main.no_selection").to_string());
         }
 
         self.current_download_idx = 0;
@@ -231,13 +255,13 @@ impl MyApp {
         }
         // stop_tx는 즉시 해제하지 않고, 스레드가 종료되어 Failed/Stopped 메시지를 보낼 때까지 기다리거나
         // UI 반응성을 위해 즉시 상태 변경
-        self.progress_text = "중지 중...".to_string();
+        self.progress_text = rust_i18n::t!("main.download_stopped").to_string();
     }
 
     fn download_next(&mut self) {
         if self.current_download_idx >= self.download_queue.len() {
             self.state = AppState::Finished;
-            self.progress_text = "모든 다운로드 완료!".to_string();
+            self.progress_text = rust_i18n::t!("main.all_completed").to_string();
             self.progress = 1.0;
             self.stop_tx = None;
             return;
@@ -255,7 +279,7 @@ impl MyApp {
 
         // UI 초기화
         self.progress = 0.0;
-        self.progress_text = format!("준비 중: {}", video.title);
+        self.progress_text = rust_i18n::t!("main.preparing_video", title = video.title).to_string();
         
         // 중지 채널 생성
         let (stop_tx, stop_rx) = channel();
@@ -282,6 +306,16 @@ impl MyApp {
             }
         });
     }
+
+    fn save_config(&self) {
+        let config = AppConfig {
+            download_dir: Some(self.download_dir.clone()),
+            format: AppConfig::format_to_string(&self.format),
+            audio_quality: "320K".to_string(),
+            language: rust_i18n::locale().to_string(),
+        };
+        let _ = config.save();
+    }
 }
 
 impl eframe::App for MyApp {
@@ -297,7 +331,7 @@ impl eframe::App for MyApp {
                         }
                         rust_yt::initializer::InitStatus::Downloading(p, msg) => {
                             self.init_progress = (p / 100.0) as f32;
-                            self.init_status = format!("다운로드 중: {} ({:.1}%)", msg, p);
+                            self.init_status = rust_i18n::t!("initialization.downloading", file = msg, percent = format!("{:.1}", p)).to_string();
                         }
                         rust_yt::initializer::InitStatus::Extracting(msg) => {
                             self.init_status = msg;
@@ -340,26 +374,26 @@ impl eframe::App for MyApp {
                             self.progress_text = format!("{:.1}% ({})", p, speed);
                         }
                         DownloadStatus::Converting => {
-                            self.progress_text = "변환 중...".to_string();
+                            self.progress_text = rust_i18n::t!("main.converting").to_string();
                         }
                         DownloadStatus::Completed(_) => {
                             self.current_download_idx += 1;
                             self.download_next();
                         }
                         DownloadStatus::Failed(e) => {
-                            if self.progress_text == "중지 중..." {
+                            if self.progress_text == rust_i18n::t!("main.download_stopped").to_string() {
                                 self.state = AppState::Ready;
-                                self.progress_text = "다운로드가 중지되었습니다.".to_string();
+                                self.progress_text = rust_i18n::t!("main.download_stopped").to_string();
                             } else {
                                 self.progress_text = format!("오류: {}", e);
-                                self.error_msg = Some(format!("다운로드 중단: {}", e));
+                                self.error_msg = Some(rust_i18n::t!("main.download_paused", error = e).to_string());
                                 self.state = AppState::Ready;
                             }
                             self.stop_tx = None;
                         }
                         DownloadStatus::Stopped => {
                             self.state = AppState::Ready;
-                            self.progress_text = "다운로드가 중지되었습니다.".to_string();
+                            self.progress_text = rust_i18n::t!("main.download_stopped").to_string();
                             self.stop_tx = None;
                         }
                     }
@@ -387,7 +421,7 @@ impl eframe::App for MyApp {
              egui::CentralPanel::default().show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(100.0);
-                    ui.heading("🚀 초기 설정 중...");
+                    ui.heading(rust_i18n::t!("initialization.title"));
                     ui.add_space(20.0);
                     ui.spinner();
                     ui.add_space(20.0);
@@ -404,21 +438,16 @@ impl eframe::App for MyApp {
              egui::CentralPanel::default().show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(50.0);
-                    ui.heading("🎬 YouTube Downloader");
+                    ui.heading(rust_i18n::t!("main.title"));
                     ui.add_space(50.0);
-                    ui.label("다운로드할 폴더를 선택해주세요.");
+                    ui.label(rust_i18n::t!("main.select_folder_msg"));
                     ui.add_space(20.0);
-                    if ui.button("폴더 선택하기").clicked() {
+                    if ui.button(rust_i18n::t!("main.select_folder_btn")).clicked() {
                          if let Some(path) = rfd::FileDialog::new().pick_folder() {
                             self.download_dir = path.clone();
                             self.state = AppState::Input;
                             // 설정 저장
-                            let config = AppConfig {
-                                download_dir: Some(path),
-                                format: AppConfig::format_to_string(&self.format),
-                                audio_quality: "320K".to_string(),
-                            };
-                            let _ = config.save();
+                            self.save_config();
                         }
                     }
                 });
@@ -429,22 +458,47 @@ impl eframe::App for MyApp {
         // 1. Top Panel (설정 및 입력)
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.add_space(5.0);
-            ui.heading("🎬 YouTube Downloader");
+            ui.heading(rust_i18n::t!("main.title"));
             ui.add_space(5.0);
+
+            // [NEW] 언어 선택
+            ui.horizontal(|ui| {
+                ui.label(rust_i18n::t!("main.language_label"));
+                let current_locale = rust_i18n::locale().to_string();
+                let mut selected_locale = current_locale.clone();
+                
+                egui::ComboBox::from_id_salt("lang_combo")
+                    .selected_text(match selected_locale.as_str() {
+                        "en" => "English",
+                        "ko" => "한국어",
+                        "ja" => "日本語",
+                        "zh-CN" => "中文 (简体)",
+                        _ => "English", // Default fallback
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut selected_locale, "en".to_string(), "English");
+                        ui.selectable_value(&mut selected_locale, "ko".to_string(), "한국어");
+                        ui.selectable_value(&mut selected_locale, "ja".to_string(), "日本語");
+                        ui.selectable_value(&mut selected_locale, "zh-CN".to_string(), "中文 (简体)");
+                    });
+
+                if selected_locale != current_locale {
+                    rust_i18n::set_locale(&selected_locale);
+                     // 설정 저장
+                    self.save_config();
+                }
+            });
+            
+            ui.separator();
 
             // 경로 등
             ui.horizontal(|ui| {
-                ui.label(format!("저장 위치: {}", self.download_dir.display()));
-                if ui.button("변경").clicked() {
+                ui.label(rust_i18n::t!("main.save_path", path = self.download_dir.display()));
+                if ui.button(rust_i18n::t!("main.change_btn")).clicked() {
                     if let Some(path) = rfd::FileDialog::new().pick_folder() {
                         self.download_dir = path.clone();
                         // 설정 저장
-                        let config = AppConfig {
-                            download_dir: Some(path),
-                            format: AppConfig::format_to_string(&self.format),
-                            audio_quality: "320K".to_string(),
-                        };
-                        let _ = config.save();
+                        self.save_config();
                     }
                 }
             });
@@ -452,10 +506,10 @@ impl eframe::App for MyApp {
 
             // URL 입력
             ui.horizontal(|ui| {
-                ui.label("URL:");
+                ui.label(rust_i18n::t!("main.url_label"));
                 let text_edit = ui.text_edit_singleline(&mut self.url);
                 if self.state.is_input() || matches!(self.state, AppState::Ready | AppState::Finished) {
-                    if ui.button("분석").clicked() || (text_edit.lost_focus() && ctx.input(|i| i.key_pressed(egui::Key::Enter))) {
+                    if ui.button(rust_i18n::t!("main.analyze_btn")).clicked() || (text_edit.lost_focus() && ctx.input(|i| i.key_pressed(egui::Key::Enter))) {
                         if !self.url.trim().is_empty() {
                             self.start_analysis();
                         }
@@ -467,35 +521,30 @@ impl eframe::App for MyApp {
 
             // 형식 선택
             ui.horizontal(|ui| {
-                ui.label("형식:");
+                ui.label(rust_i18n::t!("main.format_label"));
                 let prev_format = self.format.clone();
                 egui::ComboBox::from_id_salt("format_combo")
                     .selected_text(match self.format {
-                        DownloadFormat::Mp3 => "🎵 Audio (MP3)",
-                        DownloadFormat::Wav => "🎵 Audio (WAV)",
-                        DownloadFormat::M4a => "🎵 Audio (M4A)",
-                        DownloadFormat::Flac => "🎵 Audio (FLAC)",
-                        DownloadFormat::Mp4 => "🎬 Video (MP4)",
-                        DownloadFormat::Webm => "🎬 Video (WEBM)",
+                        DownloadFormat::Mp3 => rust_i18n::t!("formats.audio_mp3"),
+                        DownloadFormat::Wav => rust_i18n::t!("formats.audio_wav"),
+                        DownloadFormat::M4a => rust_i18n::t!("formats.audio_m4a"),
+                        DownloadFormat::Flac => rust_i18n::t!("formats.audio_flac"),
+                        DownloadFormat::Mp4 => rust_i18n::t!("formats.video_mp4"),
+                        DownloadFormat::Webm => rust_i18n::t!("formats.video_webm"),
                     })
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.format, DownloadFormat::Mp3, "🎵 Audio (MP3)");
-                        ui.selectable_value(&mut self.format, DownloadFormat::Wav, "🎵 Audio (WAV)");
-                        ui.selectable_value(&mut self.format, DownloadFormat::M4a, "🎵 Audio (M4A)");
-                        ui.selectable_value(&mut self.format, DownloadFormat::Flac, "🎵 Audio (FLAC)");
+                        ui.selectable_value(&mut self.format, DownloadFormat::Mp3, rust_i18n::t!("formats.audio_mp3"));
+                        ui.selectable_value(&mut self.format, DownloadFormat::Wav, rust_i18n::t!("formats.audio_wav"));
+                        ui.selectable_value(&mut self.format, DownloadFormat::M4a, rust_i18n::t!("formats.audio_m4a"));
+                        ui.selectable_value(&mut self.format, DownloadFormat::Flac, rust_i18n::t!("formats.audio_flac"));
                         ui.separator();
-                        ui.selectable_value(&mut self.format, DownloadFormat::Mp4, "🎬 Video (MP4)");
-                        ui.selectable_value(&mut self.format, DownloadFormat::Webm, "🎬 Video (WEBM)");
+                        ui.selectable_value(&mut self.format, DownloadFormat::Mp4, rust_i18n::t!("formats.video_mp4"));
+                        ui.selectable_value(&mut self.format, DownloadFormat::Webm, rust_i18n::t!("formats.video_webm"));
                     });
                 
                 // 포맷 변경 시 설정 저장
                 if prev_format != self.format {
-                    let config = AppConfig {
-                        download_dir: Some(self.download_dir.clone()),
-                        format: AppConfig::format_to_string(&self.format),
-                        audio_quality: "320K".to_string(),
-                    };
-                    let _ = config.save();
+                    self.save_config();
                 }
             });
 
@@ -504,7 +553,7 @@ impl eframe::App for MyApp {
                 ui.add_space(5.0);
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label("영상 정보를 분석 중입니다...");
+                    ui.label(rust_i18n::t!("main.analyzing_msg"));
                 });
             }
             
@@ -517,7 +566,7 @@ impl eframe::App for MyApp {
             
             // 에러 메시지
             if let Some(err) = &self.error_msg {
-                ui.colored_label(egui::Color32::RED, format!("⚠️ {}", err));
+                ui.colored_label(egui::Color32::RED, rust_i18n::t!("main.error_prefix", msg = err));
                 ui.separator();
             }
 
@@ -527,12 +576,12 @@ impl eframe::App for MyApp {
                     let btn_text = if let Some(info) = &self.playlist_info {
                         let count = info.entries.iter().filter(|e| e.selected).count();
                         if count > 0 {
-                            format!("{}개 영상 다운로드 시작", count)
+                            rust_i18n::t!("main.download_start_count", count = count)
                         } else {
-                            "선택된 영상 없음".to_string()
+                            rust_i18n::t!("main.no_selection")
                         }
                     } else {
-                        "분석 필요".to_string()
+                        rust_i18n::t!("main.need_analysis")
                     };
 
                     // 분석이 완료된 상태에서만 버튼 활성화
@@ -545,7 +594,7 @@ impl eframe::App for MyApp {
                     }
                 }
                 AppState::Downloading => {
-                    ui.label(format!("다운로드 중 ({}/{}):", self.current_download_idx + 1, self.download_queue.len()));
+                    ui.label(rust_i18n::t!("main.downloading_status", current = self.current_download_idx + 1, total = self.download_queue.len()));
                     if self.current_download_idx < self.download_queue.len() {
                         ui.label(&self.download_queue[self.current_download_idx].title);
                     }
@@ -555,14 +604,14 @@ impl eframe::App for MyApp {
                     ui.add(egui::ProgressBar::new(self.progress as f32).animate(true));
 
                     ui.add_space(5.0);
-                    if ui.button("다운로드 중지").clicked() {
+                    if ui.button(rust_i18n::t!("main.stop_download_btn")).clicked() {
                         self.stop_download();
                     }
                 }
                 AppState::Finished => {
-                    ui.label("모든 작업이 완료되었습니다!");
+                    ui.label(rust_i18n::t!("main.all_completed"));
                     ui.horizontal(|ui| {
-                        if ui.button("저장 폴더 열기").clicked() {
+                        if ui.button(rust_i18n::t!("main.open_folder_btn")).clicked() {
                             #[cfg(target_os = "linux")]
                             let _ = std::process::Command::new("xdg-open").arg(&self.download_dir).spawn();
                             #[cfg(target_os = "windows")]
@@ -571,7 +620,7 @@ impl eframe::App for MyApp {
                             let _ = std::process::Command::new("open").arg(&self.download_dir).spawn();
                         }
 
-                        if ui.button("목록으로").clicked() {
+                        if ui.button(rust_i18n::t!("main.back_to_list_btn")).clicked() {
                             self.state = AppState::Ready;
                             self.current_download_idx = 0;
                             self.progress = 0.0;
@@ -590,11 +639,11 @@ impl eframe::App for MyApp {
                 
                 if info.is_playlist {
                      ui.horizontal(|ui| {
-                         ui.label(format!("총 {}개의 영상", info.entries.len()));
-                         if ui.button("전체 선택").clicked() {
+                         ui.label(rust_i18n::t!("main.total_videos", count = info.entries.len()));
+                         if ui.button(rust_i18n::t!("main.select_all")).clicked() {
                              for entry in &mut info.entries { entry.selected = true; }
                          }
-                         if ui.button("전체 해제").clicked() {
+                         if ui.button(rust_i18n::t!("main.deselect_all")).clicked() {
                              for entry in &mut info.entries { entry.selected = false; }
                          }
                      });
@@ -631,8 +680,8 @@ impl eframe::App for MyApp {
                                      ui.add(egui::Image::from_uri(thumb_url).max_height(100.0).corner_radius(5.0));
                                 }
                                 ui.vertical(|ui| {
-                                    ui.label(format!("제목: {}", entry.title));
-                                    ui.label(format!("길이: {}", entry.format_duration()));
+                                    ui.label(rust_i18n::t!("main.video_title", title = entry.title));
+                                    ui.label(rust_i18n::t!("main.video_duration", duration = entry.format_duration()));
                                 });
                             });
                         }
@@ -643,7 +692,7 @@ impl eframe::App for MyApp {
                 if !matches!(self.state, AppState::Analyzing) {
                     ui.vertical_centered(|ui| {
                          ui.add_space(50.0);
-                         ui.label("URL을 입력하고 '분석' 버튼을 눌러주세요.");
+                         ui.label(rust_i18n::t!("main.input_url_hint"));
                     });
                 }
             }

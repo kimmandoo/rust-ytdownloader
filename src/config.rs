@@ -9,6 +9,12 @@ pub struct AppConfig {
     pub download_dir: Option<PathBuf>,
     pub format: String,
     pub audio_quality: String,
+    #[serde(default = "default_language")]
+    pub language: String,
+}
+
+fn default_language() -> String {
+    "auto".to_string()
 }
 
 impl Default for AppConfig {
@@ -17,6 +23,7 @@ impl Default for AppConfig {
             download_dir: None,
             format: "mp3".to_string(),
             audio_quality: "320K".to_string(),
+            language: "auto".to_string(),
         }
     }
 }
