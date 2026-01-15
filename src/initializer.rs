@@ -40,7 +40,91 @@ pub fn init_dependencies(tx: std::sync::mpsc::Sender<InitStatus>) {
         }
     }
 
+    // 3. Update Check (Non-fatal)
+    // yt-dlp 업데이트 확인
+    let _ = tx.send(InitStatus::Starting("yt-dlp 업데이트 확인 중...".to_string()));
+    match update_ytdlp(&ytdlp_path) {
+        Ok(msg) => {
+            let _ = tx.send(InitStatus::Starting(format!("yt-dlp: {}", msg)));
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+        }
+        Err(e) => {
+            let _ = tx.send(InitStatus::Starting(format!("yt-dlp 업데이트 실패 (건너뜀): {}", e)));
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+        }
+    }
+
+    // ffmpeg 작동 확인
+    let _ = tx.send(InitStatus::Starting("ffmpeg 작동 확인 중...".to_string()));
+    match check_ffmpeg(&ffmpeg_path) {
+        Ok(msg) => {
+            let _ = tx.send(InitStatus::Starting(format!("ffmpeg: {}", msg)));
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+        }
+        Err(e) => {
+            let _ = tx.send(InitStatus::Starting(format!("ffmpeg 확인 실패 (건너뜀): {}", e)));
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+        }
+    }
+
     let _ = tx.send(InitStatus::Completed);
+}
+
+fn update_ytdlp(ytdlp_path: &Path) -> ValidatedResult<String> {
+    let mut cmd = Command::new(ytdlp_path);
+    cmd.arg("-U");
+    
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    let output = cmd.output()
+        .map_err(|e| format!("실행 실패: {}", e))?;
+
+    if !output.status.success() {
+         let stderr = String::from_utf8_lossy(&output.stderr);
+         return Err(format!("업데이트 실패: {}", stderr.trim()));
+    }
+    
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Find the line containing "up to date" or "Updated"
+    let status_line = stdout.lines()
+        .find(|l| l.contains("up to date") || l.contains("Updated"))
+        .unwrap_or("업데이트 확인 완료");
+        
+    Ok(status_line.trim().to_string())
+}
+
+fn check_ffmpeg(ffmpeg_path: &Path) -> ValidatedResult<String> {
+    let mut cmd = Command::new(ffmpeg_path);
+    cmd.arg("-version");
+    
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    let output = cmd.output()
+        .map_err(|e| format!("실행 실패: {}", e))?;
+
+    if !output.status.success() {
+         return Err("ffmpeg 실행 중 오류 발생".to_string());
+    }
+    
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let version_line = stdout.lines().next().unwrap_or("ffmpeg 감지됨");
+    
+    // 버전 정보만 간략히 추출 (예: ffmpeg version n6.0 ... -> version n6.0)
+    let display_msg = if version_line.len() > 30 {
+        &version_line[..30]
+    } else {
+        version_line
+    };
+    
+    Ok(format!("정상 작동 ({})", display_msg))
 }
 
 fn get_app_dir() -> PathBuf {
