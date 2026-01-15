@@ -64,14 +64,50 @@ fn get_ffmpeg_path(app_dir: &Path) -> PathBuf {
 }
 
 fn download_file(url: &str, dest: &Path, tx: &std::sync::mpsc::Sender<InitStatus>, filename: &str) -> ValidatedResult<()> {
+    use backoff::{ExponentialBackoff, retry};
+    use std::time::Duration;
+
     let _ = tx.send(InitStatus::Starting(format!("{} 다운로드 준비...", filename)));
     
-    let client = reqwest::blocking::Client::new();
-    let mut response = client.get(url).send().map_err(|e| e.to_string())?;
-    
-    if !response.status().is_success() {
-        return Err(format!("서버 응답 오류: {}", response.status()));
-    }
+    // 타임아웃 설정된 클라이언트 생성
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(300)) // 5분
+        .build()
+        .map_err(|e| format!("HTTP 클라이언트 생성 실패: {}", e))?;
+
+    // 재시도 설정 (최대 3회, 지수 백오프)
+    let backoff = ExponentialBackoff {
+        max_elapsed_time: Some(Duration::from_secs(60)),
+        initial_interval: Duration::from_secs(1),
+        max_interval: Duration::from_secs(10),
+        ..Default::default()
+    };
+
+    let url_owned = url.to_string();
+    let filename_owned = filename.to_string();
+    let tx_clone = tx.clone();
+
+    // 재시도 로직으로 HTTP 요청
+    let response = retry(backoff, || {
+        let _ = tx_clone.send(InitStatus::Starting(format!("{} 다운로드 시도 중...", filename_owned)));
+        
+        client.get(&url_owned)
+            .send()
+            .map_err(|e| {
+                let _ = tx_clone.send(InitStatus::Starting(format!("{} 재시도 중...", filename_owned)));
+                backoff::Error::transient(e)
+            })
+            .and_then(|resp| {
+                if resp.status().is_success() {
+                    Ok(resp)
+                } else {
+                    Err(backoff::Error::permanent(
+                        reqwest::Error::from(resp.error_for_status().unwrap_err())
+                    ))
+                }
+            })
+    }).map_err(|e| format!("다운로드 실패 (재시도 후): {}", e))?;
 
     let total_size = response.content_length().unwrap_or(0);
     let mut file = fs::File::create(dest).map_err(|e| e.to_string())?;
@@ -81,6 +117,7 @@ fn download_file(url: &str, dest: &Path, tx: &std::sync::mpsc::Sender<InitStatus
     use std::io::Read;
     use std::io::Write;
 
+    let mut response = response;
     loop {
         let bytes_read = response.read(&mut buffer).map_err(|e| e.to_string())?;
         if bytes_read == 0 {

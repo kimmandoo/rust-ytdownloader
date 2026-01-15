@@ -1,4 +1,4 @@
-# Rust YouTube Downloader
+# YouTube Downloader built with Rust
 
 A modern, cross-platform YouTube downloader built with Rust and egui.
 

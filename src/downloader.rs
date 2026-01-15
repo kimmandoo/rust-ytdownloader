@@ -2,6 +2,7 @@ use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::path::PathBuf;
 
@@ -150,10 +151,16 @@ pub fn download_video(
     // Child를 Arc<Mutex>로 감싸서 공유
     let child_shared = Arc::new(Mutex::new(child));
     
+    // 중지 요청 추적을 위한 atomic flag
+    let stopped = Arc::new(AtomicBool::new(false));
+    let stopped_for_killer = stopped.clone();
+    
     // 1. Killer 스레드: 중지 신호 감시
     let child_for_killer = child_shared.clone();
     thread::spawn(move || {
         if stop_signal.recv().is_ok() {
+            // 중지 플래그 설정
+            stopped_for_killer.store(true, Ordering::SeqCst);
             // 신호 수신 시 프로세스 kill
             if let Ok(mut c) = child_for_killer.lock() {
                  let _ = c.kill();
@@ -198,18 +205,27 @@ pub fn download_video(
         c.wait()
     };
 
+    // 중지 신호가 왔는지 확인
+    let was_stopped = stopped.load(Ordering::SeqCst);
+
     match status_result {
         Ok(status) => {
             if status.success() {
                 let _ = tx.send(DownloadStatus::Completed(title));
+            } else if was_stopped {
+                // 사용자가 중지를 요청한 경우
+                let _ = tx.send(DownloadStatus::Stopped);
             } else {
-                // kill 된 경우도 포함될 수 있음 (Windows에서는 kill 시 종료 코드 다름)
-                // 명확히 구분하기 어렵지만, 사용자가 중단을 눌렀다면 UI측에서 Stopped 처리
-                let _ = tx.send(DownloadStatus::Failed("다운로드 실패 (또는 중단)".to_string()));
+                // 실제 오류
+                let _ = tx.send(DownloadStatus::Failed("다운로드 실패".to_string()));
             }
         }
         Err(_) => {
-             let _ = tx.send(DownloadStatus::Failed("프로세스 대기 오류".to_string()));
+            if was_stopped {
+                let _ = tx.send(DownloadStatus::Stopped);
+            } else {
+                let _ = tx.send(DownloadStatus::Failed("프로세스 대기 오류".to_string()));
+            }
         }
     }
 }
