@@ -1,0 +1,183 @@
+name: Release on Commit
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: rust-ytdownloader
+            asset_name: rust-ytdownloader-linux-x86_64
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: rust-ytdownloader.exe
+            asset_name: rust-ytdownloader-windows-x86_64.exe
+          # macOS Intel
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: rust-ytdownloader
+            asset_name: rust-ytdownloader-macos-x86_64
+          # macOS Apple Silicon
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: rust-ytdownloader
+            asset_name: rust-ytdownloader-macos-aarch64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ========== Linux Dependencies ==========
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libssl-dev \
+            libgtk-3-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libfontconfig1-dev
+
+      # ========== macOS Dependencies ==========
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install openssl pkg-config
+
+      # ========== Windows Dependencies ==========
+      - name: Install Windows dependencies
+        if: runner.os == 'Windows'
+        run: |
+          choco install -y openssl
+
+      # ========== Rust Setup ==========
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      # ========== Build ==========
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      # ========== Upload Artifact ==========
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+          retention-days: 1
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          
+          # Linux
+          if [ -f artifacts/rust-ytdownloader-linux-x86_64/rust-ytdownloader ]; then
+            chmod +x artifacts/rust-ytdownloader-linux-x86_64/rust-ytdownloader
+            mv artifacts/rust-ytdownloader-linux-x86_64/rust-ytdownloader release-assets/rust-ytdownloader-linux-x86_64
+          fi
+          
+          # Windows
+          if [ -f "artifacts/rust-ytdownloader-windows-x86_64.exe/rust-ytdownloader.exe" ]; then
+            mv "artifacts/rust-ytdownloader-windows-x86_64.exe/rust-ytdownloader.exe" release-assets/rust-ytdownloader-windows-x86_64.exe
+          fi
+          
+          # macOS Intel
+          if [ -f artifacts/rust-ytdownloader-macos-x86_64/rust-ytdownloader ]; then
+            chmod +x artifacts/rust-ytdownloader-macos-x86_64/rust-ytdownloader
+            mv artifacts/rust-ytdownloader-macos-x86_64/rust-ytdownloader release-assets/rust-ytdownloader-macos-x86_64
+          fi
+          
+          # macOS ARM
+          if [ -f artifacts/rust-ytdownloader-macos-aarch64/rust-ytdownloader ]; then
+            chmod +x artifacts/rust-ytdownloader-macos-aarch64/rust-ytdownloader
+            mv artifacts/rust-ytdownloader-macos-aarch64/rust-ytdownloader release-assets/rust-ytdownloader-macos-aarch64
+          fi
+          
+          ls -la release-assets/
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate release tag
+        id: tag
+        run: |
+          TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          TAG="v${{ steps.get_version.outputs.version }}-${TIMESTAMP}-${SHORT_SHA}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Release ${{ steps.tag.outputs.tag }}
+          body: |
+            ## 🚀 Auto Release
+            
+            **Commit:** `${{ github.sha }}`
+            **Message:** ${{ github.event.head_commit.message }}
+            **Author:** ${{ github.event.head_commit.author.name }}
+            **Date:** ${{ github.event.head_commit.timestamp }}
+            
+            ### 📦 Downloads
+            
+            | Platform | File |
+            |----------|------|
+            | 🐧 Linux x86_64 | `rust-ytdownloader-linux-x86_64` |
+            | 🪟 Windows x86_64 | `rust-ytdownloader-windows-x86_64.exe` |
+            | 🍎 macOS Intel | `rust-ytdownloader-macos-x86_64` |
+            | 🍎 macOS Apple Silicon | `rust-ytdownloader-macos-aarch64` |
+          files: |
+            release-assets/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
