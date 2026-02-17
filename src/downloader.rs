@@ -71,6 +71,10 @@ pub fn download_video(
     };
 
     let output_str = output_template.to_string_lossy().to_string();
+    let is_audio_format = matches!(
+        config.format,
+        DownloadFormat::Mp3 | DownloadFormat::Wav | DownloadFormat::M4a | DownloadFormat::Flac
+    );
 
     let mut args = vec![
         "--no-playlist".to_string(),
@@ -81,6 +85,14 @@ pub fn download_video(
         "-o".to_string(),
         output_str,
     ];
+
+    if is_audio_format {
+        args.extend_from_slice(&[
+            "--postprocessor-args".to_string(),
+            "EmbedThumbnail+ffmpeg_o:-vf crop='if(gt(ih,iw),iw,ih):if(gt(iw,ih),ih,iw)'"
+                .to_string(),
+        ]);
+    }
 
     match config.format {
         DownloadFormat::Mp3 => {
