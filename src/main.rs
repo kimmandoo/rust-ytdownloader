@@ -316,6 +316,40 @@ impl MyApp {
         };
         let _ = config.save();
     }
+
+    fn centered_square_uv(image_size: egui::Vec2) -> egui::Rect {
+        if image_size.x <= 0.0 || image_size.y <= 0.0 {
+            return egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+        }
+
+        if image_size.x > image_size.y {
+            let width_ratio = image_size.y / image_size.x;
+            let margin = (1.0 - width_ratio) * 0.5;
+            egui::Rect::from_min_max(egui::pos2(margin, 0.0), egui::pos2(1.0 - margin, 1.0))
+        } else {
+            let height_ratio = image_size.x / image_size.y;
+            let margin = (1.0 - height_ratio) * 0.5;
+            egui::Rect::from_min_max(egui::pos2(0.0, margin), egui::pos2(1.0, 1.0 - margin))
+        }
+    }
+
+    fn add_square_thumbnail(ui: &mut egui::Ui, ctx: &egui::Context, thumb_url: &str, size: f32) {
+        let thumbnail_size = egui::vec2(size, size);
+
+        let image = match ctx.try_load_texture(
+            thumb_url,
+            egui::TextureOptions::LINEAR,
+            egui::load::SizeHint::from(thumbnail_size),
+        ) {
+            Ok(egui::load::TexturePoll::Ready { texture }) => {
+                let uv = Self::centered_square_uv(texture.size);
+                egui::Image::new(texture).uv(uv)
+            }
+            _ => egui::Image::from_uri(thumb_url),
+        };
+
+        ui.add(image.fit_to_exact_size(thumbnail_size).corner_radius(5.0));
+    }
 }
 
 impl eframe::App for MyApp {
@@ -659,7 +693,7 @@ impl eframe::App for MyApp {
                                 
                                 // 썸네일
                                 if let Some(thumb_url) = &entry.thumbnail {
-                                    ui.add(egui::Image::from_uri(thumb_url).max_height(50.0).corner_radius(5.0));
+                                    Self::add_square_thumbnail(ui, ctx, thumb_url, 50.0);
                                 }
 
                                 ui.vertical(|ui| {
@@ -677,8 +711,8 @@ impl eframe::App for MyApp {
                                 // ui.checkbox(&mut entry.selected, ""); 
                                 
                                 if let Some(thumb_url) = &entry.thumbnail {
-                                     ui.add(egui::Image::from_uri(thumb_url).max_height(100.0).corner_radius(5.0));
-                                }
+                                     Self::add_square_thumbnail(ui, ctx, thumb_url, 100.0);
+                                 }
                                 ui.vertical(|ui| {
                                     ui.label(rust_i18n::t!("main.video_title", title = entry.title));
                                     ui.label(rust_i18n::t!("main.video_duration", duration = entry.format_duration()));
