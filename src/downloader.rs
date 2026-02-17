@@ -89,7 +89,7 @@ pub fn download_video(
     if is_audio_format {
         args.extend_from_slice(&[
             "--postprocessor-args".to_string(),
-            "EmbedThumbnail+ffmpeg_o:-vf crop='if(gt(ih,iw),iw,ih):if(gt(iw,ih),ih,iw)'"
+            "EmbedThumbnail+ffmpeg_o:-c:v mjpeg -vf crop='if(gt(ih,iw),iw,ih):if(gt(iw,ih),ih,iw)'"
                 .to_string(),
         ]);
     }
