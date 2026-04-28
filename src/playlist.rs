@@ -99,15 +99,25 @@ pub fn get_ytdlp_path() -> std::path::PathBuf {
 
 /// URL에서 플레이리스트/영상 정보 가져오기
 pub fn fetch_playlist_info(url: &str) -> Result<PlaylistInfo, String> {
+    fetch_playlist_info_with_channel(url, crate::ytdlp::YtDlpChannel::default())
+}
+
+pub fn fetch_playlist_info_with_channel(
+    url: &str,
+    ytdlp_channel: crate::ytdlp::YtDlpChannel,
+) -> Result<PlaylistInfo, String> {
+    fetch_playlist_info_with_retry(url, ytdlp_channel, true)
+}
+
+fn fetch_playlist_info_with_retry(
+    url: &str,
+    ytdlp_channel: crate::ytdlp::YtDlpChannel,
+    allow_nightly_retry: bool,
+) -> Result<PlaylistInfo, String> {
     let ytdlp = get_ytdlp_path();
-    
+
     let mut command = Command::new(&ytdlp);
-    command.args([
-            "--flat-playlist",
-            "-J",
-            "--no-warnings",
-            url,
-        ]);
+    command.args(["--flat-playlist", "-J", "--no-warnings", url]);
 
     #[cfg(target_os = "windows")]
     {
@@ -116,30 +126,48 @@ pub fn fetch_playlist_info(url: &str) -> Result<PlaylistInfo, String> {
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let output = command.output()
+    let output = command
+        .output()
         .map_err(|e| format!("yt-dlp 실행 실패: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        if allow_nightly_retry && crate::ytdlp::should_retry_after_channel_update(url, &stderr) {
+            match crate::ytdlp::update_ytdlp_channel(&ytdlp, ytdlp_channel) {
+                Ok(_) => return fetch_playlist_info_with_retry(url, ytdlp_channel, false),
+                Err(update_error) => {
+                    return Err(format!(
+                        "Failed to fetch video info: {} | {} update failed: {}",
+                        stderr,
+                        ytdlp_channel.as_str(),
+                        update_error
+                    ));
+                }
+            }
+        }
         return Err(format!("영상 정보를 가져올 수 없습니다: {}", stderr));
     }
 
     let json_str = String::from_utf8_lossy(&output.stdout);
-    let response: YtDlpResponse = serde_json::from_str(&json_str)
-        .map_err(|e| format!("JSON 파싱 실패: {}", e))?;
+    let response: YtDlpResponse =
+        serde_json::from_str(&json_str).map_err(|e| format!("JSON 파싱 실패: {}", e))?;
 
     let is_playlist = response.response_type.as_deref() == Some("playlist");
-    
+
     if is_playlist {
         // 플레이리스트
-        let entries = response.entries.unwrap_or_default()
+        let entries = response
+            .entries
+            .unwrap_or_default()
             .into_iter()
             .filter_map(|e| {
                 let id = e.id?;
                 Some(VideoEntry {
                     id: id.clone(),
                     title: e.title.unwrap_or_else(|| "제목 없음".to_string()),
-                    url: e.url.unwrap_or_else(|| format!("https://www.youtube.com/watch?v={}", id)),
+                    url: e
+                        .url
+                        .unwrap_or_else(|| format!("https://www.youtube.com/watch?v={}", id)),
                     thumbnail: e.thumbnail,
                     duration: e.duration,
                     duration_string: e.duration_string,
@@ -157,7 +185,10 @@ pub fn fetch_playlist_info(url: &str) -> Result<PlaylistInfo, String> {
         // 단일 영상
         let entry = VideoEntry {
             id: response.id.unwrap_or_default(),
-            title: response.title.clone().unwrap_or_else(|| "제목 없음".to_string()),
+            title: response
+                .title
+                .clone()
+                .unwrap_or_else(|| "제목 없음".to_string()),
             url: response.webpage_url.unwrap_or_else(|| url.to_string()),
             thumbnail: response.thumbnail,
             duration: response.duration,

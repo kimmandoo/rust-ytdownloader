@@ -1,12 +1,12 @@
-use std::io::{BufRead, BufReader};
-use std::fs;
 use image::{GenericImageView, ImageFormat};
+use std::fs;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DownloadFormat {
@@ -28,25 +28,25 @@ pub struct DownloadConfig {
 
 #[derive(Debug, Clone)]
 pub enum DownloadStatus {
-    Starting(String),     // message
+    Starting(String),      // message
     Progress(f64, String), // percent, speed/status
     Converting,
-    Completed(String),    // filename
-    Failed(String),       // error message
-    Stopped,              // [NEW] 중단됨
+    Completed(String), // filename
+    Failed(String),    // error message
+    Stopped,           // [NEW] 중단됨
 }
 
 pub fn download_video(
-    config: DownloadConfig, 
-    title: String, 
+    config: DownloadConfig,
+    title: String,
     tx: Sender<DownloadStatus>,
-    stop_signal: Receiver<()> // [NEW] 중지 신호
+    stop_signal: Receiver<()>, // [NEW] 중지 신호
 ) {
     let ytdlp = crate::playlist::get_ytdlp_path();
-    
+
     // 파일명 살균 및 템플릿 설정
     let sanitized_title = sanitize_filename(&title);
-    
+
     // ffmpeg 경로 설정을 위한 PATH 업데이트
     #[cfg(target_os = "windows")]
     let new_path = {
@@ -60,16 +60,24 @@ pub fn download_video(
     let new_path = {
         let current_path = std::env::var("PATH").unwrap_or_default();
         // GUI 앱은 PATH가 제대로 설정되지 않을 수 있으므로 homebrew 경로 추가
-        format!("{}:/opt/homebrew/bin:/usr/local/bin:{}", current_path, std::env::var("HOME").unwrap_or_default() + "/.cargo/bin")
+        format!(
+            "{}:/opt/homebrew/bin:/usr/local/bin:{}",
+            current_path,
+            std::env::var("HOME").unwrap_or_default() + "/.cargo/bin"
+        )
     };
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     let new_path = std::env::var("PATH").unwrap_or_default();
 
     let output_template = match config.format {
         DownloadFormat::Mp3 | DownloadFormat::Wav | DownloadFormat::M4a | DownloadFormat::Flac => {
-            config.output_dir.join(format!("{}.%(ext)s", sanitized_title))
+            config
+                .output_dir
+                .join(format!("{}.%(ext)s", sanitized_title))
         }
-        _ => config.output_dir.join(format!("{}.%(ext)s", sanitized_title)), // Video formats mainly
+        _ => config
+            .output_dir
+            .join(format!("{}.%(ext)s", sanitized_title)), // Video formats mainly
     };
 
     let output_str = output_template.to_string_lossy().to_string();
@@ -78,7 +86,7 @@ pub fn download_video(
         "--no-playlist".to_string(),
         "--newline".to_string(),
         "--progress".to_string(),
-        "--add-metadata".to_string(),    // [NEW] 메타데이터 포함
+        "--add-metadata".to_string(), // [NEW] 메타데이터 포함
         "-o".to_string(),
         output_str,
     ];
@@ -87,46 +95,59 @@ pub fn download_video(
         DownloadFormat::Mp3 => {
             args.extend_from_slice(&[
                 "-x".to_string(),
-                "--audio-format".to_string(), "mp3".to_string(),
-                "--audio-quality".to_string(), config.audio_quality,
+                "--audio-format".to_string(),
+                "mp3".to_string(),
+                "--audio-quality".to_string(),
+                config.audio_quality,
                 "--write-thumbnail".to_string(),
-                "--convert-thumbnails".to_string(), "jpg".to_string(),
+                "--convert-thumbnails".to_string(),
+                "jpg".to_string(),
             ]);
         }
         DownloadFormat::Wav => {
             args.extend_from_slice(&[
                 "-x".to_string(),
-                "--audio-format".to_string(), "wav".to_string(),
+                "--audio-format".to_string(),
+                "wav".to_string(),
                 "--write-thumbnail".to_string(),
-                "--convert-thumbnails".to_string(), "jpg".to_string(),
+                "--convert-thumbnails".to_string(),
+                "jpg".to_string(),
             ]);
         }
         DownloadFormat::M4a => {
             args.extend_from_slice(&[
                 "-x".to_string(),
-                "--audio-format".to_string(), "m4a".to_string(),
+                "--audio-format".to_string(),
+                "m4a".to_string(),
                 "--write-thumbnail".to_string(),
-                "--convert-thumbnails".to_string(), "jpg".to_string(),
+                "--convert-thumbnails".to_string(),
+                "jpg".to_string(),
             ]);
         }
         DownloadFormat::Flac => {
             args.extend_from_slice(&[
                 "-x".to_string(),
-                "--audio-format".to_string(), "flac".to_string(),
+                "--audio-format".to_string(),
+                "flac".to_string(),
                 "--write-thumbnail".to_string(),
-                "--convert-thumbnails".to_string(), "jpg".to_string(),
+                "--convert-thumbnails".to_string(),
+                "jpg".to_string(),
             ]);
         }
         DownloadFormat::Mp4 => {
             args.extend_from_slice(&[
-                "-f".to_string(), "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best".to_string(),
-                "--merge-output-format".to_string(), "mp4".to_string(),
+                "-f".to_string(),
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best".to_string(),
+                "--merge-output-format".to_string(),
+                "mp4".to_string(),
             ]);
         }
         DownloadFormat::Webm => {
             args.extend_from_slice(&[
-                "-f".to_string(), "bestvideo[ext=webm]+bestaudio/best".to_string(),
-                "--merge-output-format".to_string(), "webm".to_string(),
+                "-f".to_string(),
+                "bestvideo[ext=webm]+bestaudio/best".to_string(),
+                "--merge-output-format".to_string(),
+                "webm".to_string(),
             ]);
         }
     }
@@ -137,10 +158,11 @@ pub fn download_video(
     let _ = tx.send(DownloadStatus::Starting("다운로드 시작...".to_string()));
 
     let mut command = Command::new(&ytdlp);
-    command.env("PATH", &new_path)
-           .args(&args)
-           .stdout(Stdio::piped())
-           .stderr(Stdio::piped());
+    command
+        .env("PATH", &new_path)
+        .args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
     #[cfg(target_os = "windows")]
     {
@@ -150,20 +172,20 @@ pub fn download_video(
     }
 
     let child = match command.spawn() {
-            Ok(c) => c,
-            Err(e) => {
-                let _ = tx.send(DownloadStatus::Failed(format!("실행 실패: {}", e)));
-                return;
-            }
-        };
+        Ok(c) => c,
+        Err(e) => {
+            let _ = tx.send(DownloadStatus::Failed(format!("실행 실패: {}", e)));
+            return;
+        }
+    };
 
     // Child를 Arc<Mutex>로 감싸서 공유
     let child_shared = Arc::new(Mutex::new(child));
-    
+
     // 중지 요청 추적을 위한 atomic flag
     let stopped = Arc::new(AtomicBool::new(false));
     let stopped_for_killer = stopped.clone();
-    
+
     // 1. Killer 스레드: 중지 신호 감시
     let child_for_killer = child_shared.clone();
     thread::spawn(move || {
@@ -172,7 +194,7 @@ pub fn download_video(
             stopped_for_killer.store(true, Ordering::SeqCst);
             // 신호 수신 시 프로세스 kill
             if let Ok(mut c) = child_for_killer.lock() {
-                 let _ = c.kill();
+                let _ = c.kill();
             }
         }
     });
@@ -212,7 +234,8 @@ pub fn download_video(
                 if line.contains("[download]") && line.contains("%") {
                     if let Some(percent_str) = line.split_whitespace().find(|s| s.ends_with('%')) {
                         if let Ok(percent) = percent_str.trim_end_matches('%').parse::<f64>() {
-                            let speed = line.split_whitespace()
+                            let speed = line
+                                .split_whitespace()
                                 .find(|s| s.ends_with("/s"))
                                 .unwrap_or("")
                                 .to_string();
@@ -220,7 +243,7 @@ pub fn download_video(
                         }
                     }
                 }
-                
+
                 if line.contains("[ExtractAudio]") || line.contains("[Merger]") {
                     let _ = tx.send(DownloadStatus::Converting);
                 }
@@ -250,7 +273,8 @@ pub fn download_video(
                         detected_audio_output,
                     );
 
-                    match resolve_thumbnail_path(&output_file, &config.output_dir, &sanitized_title) {
+                    match resolve_thumbnail_path(&output_file, &config.output_dir, &sanitized_title)
+                    {
                         Some(thumb_file) => {
                             let _ = crop_thumbnail_image_to_square(&thumb_file);
                             match embed_thumbnail_to_audio(&output_file, &thumb_file, &new_path) {
@@ -306,7 +330,11 @@ fn is_audio_format(format: &DownloadFormat) -> bool {
     )
 }
 
-fn audio_output_path(output_dir: &PathBuf, sanitized_title: &str, format: &DownloadFormat) -> PathBuf {
+fn audio_output_path(
+    output_dir: &PathBuf,
+    sanitized_title: &str,
+    format: &DownloadFormat,
+) -> PathBuf {
     let ext = match format {
         DownloadFormat::Mp3 => "mp3",
         DownloadFormat::Wav => "wav",
