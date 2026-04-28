@@ -1,9 +1,9 @@
+use crate::downloader::DownloadFormat;
+use crate::ytdlp::YtDlpChannel;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use crate::downloader::DownloadFormat;
 
-/// 앱 설정
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub download_dir: Option<PathBuf>,
@@ -11,10 +11,16 @@ pub struct AppConfig {
     pub audio_quality: String,
     #[serde(default = "default_language")]
     pub language: String,
+    #[serde(default = "default_ytdlp_channel")]
+    pub ytdlp_channel: String,
 }
 
 fn default_language() -> String {
     "auto".to_string()
+}
+
+fn default_ytdlp_channel() -> String {
+    YtDlpChannel::default().as_str().to_string()
 }
 
 impl Default for AppConfig {
@@ -24,12 +30,12 @@ impl Default for AppConfig {
             format: "mp3".to_string(),
             audio_quality: "320K".to_string(),
             language: "auto".to_string(),
+            ytdlp_channel: default_ytdlp_channel(),
         }
     }
 }
 
 impl AppConfig {
-    /// 설정 파일 경로
     fn config_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
@@ -37,7 +43,6 @@ impl AppConfig {
             .join("config.toml")
     }
 
-    /// 설정 로드 (파일이 없으면 기본값 반환)
     pub fn load() -> Self {
         let path = Self::config_path();
         if path.exists() {
@@ -50,26 +55,21 @@ impl AppConfig {
         Self::default()
     }
 
-    /// 설정 저장
     pub fn save(&self) -> Result<(), String> {
         let path = Self::config_path();
-        
-        // 디렉토리 생성
+
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("설정 폴더 생성 실패: {}", e))?;
+            fs::create_dir_all(parent).map_err(|e| format!("설정 폴더 생성 실패: {}", e))?;
         }
-        
-        let content = toml::to_string_pretty(self)
-            .map_err(|e| format!("설정 직렬화 실패: {}", e))?;
-        
-        fs::write(&path, content)
-            .map_err(|e| format!("설정 파일 저장 실패: {}", e))?;
-        
+
+        let content =
+            toml::to_string_pretty(self).map_err(|e| format!("설정 직렬화 실패: {}", e))?;
+
+        fs::write(&path, content).map_err(|e| format!("설정 파일 저장 실패: {}", e))?;
+
         Ok(())
     }
 
-    /// DownloadFormat enum에서 문자열로 변환
     pub fn format_to_string(format: &DownloadFormat) -> String {
         match format {
             DownloadFormat::Mp3 => "mp3",
@@ -78,10 +78,10 @@ impl AppConfig {
             DownloadFormat::Flac => "flac",
             DownloadFormat::Mp4 => "mp4",
             DownloadFormat::Webm => "webm",
-        }.to_string()
+        }
+        .to_string()
     }
 
-    /// 문자열에서 DownloadFormat enum으로 변환
     pub fn string_to_format(s: &str) -> DownloadFormat {
         match s {
             "wav" => DownloadFormat::Wav,
@@ -91,5 +91,9 @@ impl AppConfig {
             "webm" => DownloadFormat::Webm,
             _ => DownloadFormat::Mp3,
         }
+    }
+
+    pub fn ytdlp_channel(&self) -> YtDlpChannel {
+        YtDlpChannel::from_str(&self.ytdlp_channel)
     }
 }
