@@ -3,6 +3,7 @@ use std::io::copy;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use zip::ZipArchive;
+use crate::dependencies;
 
 #[derive(Debug, Clone)]
 pub enum InitStatus {
@@ -131,23 +132,15 @@ fn check_ffmpeg(ffmpeg_path: &Path) -> ValidatedResult<String> {
 }
 
 fn get_app_dir() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("rust-yt")
+    dependencies::app_dir()
 }
 
 fn get_ytdlp_path(app_dir: &Path) -> PathBuf {
-    #[cfg(target_os = "windows")]
-    return app_dir.join("yt-dlp.exe");
-    #[cfg(not(target_os = "windows"))]
-    return app_dir.join("yt-dlp");
+    app_dir.join(dependencies::ytdlp_file_name())
 }
 
 fn get_ffmpeg_path(app_dir: &Path) -> PathBuf {
-    #[cfg(target_os = "windows")]
-    return app_dir.join("ffmpeg.exe");
-    #[cfg(not(target_os = "windows"))]
-    return app_dir.join("ffmpeg");
+    app_dir.join(dependencies::ffmpeg_file_name())
 }
 
 fn download_file(url: &str, dest: &Path, tx: &std::sync::mpsc::Sender<InitStatus>, filename: &str) -> ValidatedResult<()> {

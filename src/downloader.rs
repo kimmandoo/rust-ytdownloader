@@ -1,6 +1,7 @@
 use std::io::{BufRead, BufReader};
 use std::fs;
-use image::{GenericImageView, ImageFormat};
+use image::GenericImageView;
+use image::codecs::jpeg::JpegEncoder;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -26,6 +27,8 @@ pub struct DownloadConfig {
     pub output_dir: PathBuf,
 }
 
+const THUMBNAIL_JPEG_QUALITY: u8 = 95;
+
 #[derive(Debug, Clone)]
 pub enum DownloadStatus {
     Starting(String),     // message
@@ -50,20 +53,15 @@ pub fn download_video(
     // ffmpeg 경로 설정을 위한 PATH 업데이트
     #[cfg(target_os = "windows")]
     let new_path = {
-        let app_dir = dirs::data_local_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("rust-yt");
-        let current_path = std::env::var("PATH").unwrap_or_default();
-        format!("{};{}", app_dir.display(), current_path)
+        crate::dependencies::dependency_path_env()
     };
     #[cfg(target_os = "macos")]
     let new_path = {
-        let current_path = std::env::var("PATH").unwrap_or_default();
         // GUI 앱은 PATH가 제대로 설정되지 않을 수 있으므로 homebrew 경로 추가
-        format!("{}:/opt/homebrew/bin:/usr/local/bin:{}", current_path, std::env::var("HOME").unwrap_or_default() + "/.cargo/bin")
+        crate::dependencies::dependency_path_env()
     };
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    let new_path = std::env::var("PATH").unwrap_or_default();
+    let new_path = crate::dependencies::dependency_path_env();
 
     let output_template = match config.format {
         DownloadFormat::Mp3 | DownloadFormat::Wav | DownloadFormat::M4a | DownloadFormat::Flac => {
@@ -89,33 +87,29 @@ pub fn download_video(
                 "-x".to_string(),
                 "--audio-format".to_string(), "mp3".to_string(),
                 "--audio-quality".to_string(), config.audio_quality,
-                "--write-thumbnail".to_string(),
-                "--convert-thumbnails".to_string(), "jpg".to_string(),
             ]);
+            args.extend(audio_thumbnail_args());
         }
         DownloadFormat::Wav => {
             args.extend_from_slice(&[
                 "-x".to_string(),
                 "--audio-format".to_string(), "wav".to_string(),
-                "--write-thumbnail".to_string(),
-                "--convert-thumbnails".to_string(), "jpg".to_string(),
             ]);
+            args.extend(audio_thumbnail_args());
         }
         DownloadFormat::M4a => {
             args.extend_from_slice(&[
                 "-x".to_string(),
                 "--audio-format".to_string(), "m4a".to_string(),
-                "--write-thumbnail".to_string(),
-                "--convert-thumbnails".to_string(), "jpg".to_string(),
             ]);
+            args.extend(audio_thumbnail_args());
         }
         DownloadFormat::Flac => {
             args.extend_from_slice(&[
                 "-x".to_string(),
                 "--audio-format".to_string(), "flac".to_string(),
-                "--write-thumbnail".to_string(),
-                "--convert-thumbnails".to_string(), "jpg".to_string(),
             ]);
+            args.extend(audio_thumbnail_args());
         }
         DownloadFormat::Mp4 => {
             args.extend_from_slice(&[
@@ -299,6 +293,16 @@ pub fn download_video(
     }
 }
 
+fn audio_thumbnail_args() -> Vec<String> {
+    vec![
+        "--write-thumbnail".to_string(),
+        "--convert-thumbnails".to_string(),
+        "jpg".to_string(),
+        "--ppa".to_string(),
+        "ThumbnailsConvertor:-q:v 2".to_string(),
+    ]
+}
+
 fn is_audio_format(format: &DownloadFormat) -> bool {
     matches!(
         format,
@@ -444,9 +448,17 @@ fn crop_thumbnail_image_to_square(image_path: &PathBuf) -> std::io::Result<()> {
     let left = (width - side) / 2;
     let top = (height - side) / 2;
     let cropped = image.crop_imm(left, top, side, side);
-    cropped
-        .save_with_format(image_path, ImageFormat::Jpeg)
-        .map_err(std::io::Error::other)
+    save_jpeg_with_quality(&cropped, image_path, THUMBNAIL_JPEG_QUALITY)
+}
+
+fn save_jpeg_with_quality(
+    image: &image::DynamicImage,
+    image_path: &PathBuf,
+    quality: u8,
+) -> std::io::Result<()> {
+    let file = fs::File::create(image_path)?;
+    let mut encoder = JpegEncoder::new_with_quality(file, quality);
+    encoder.encode_image(image).map_err(std::io::Error::other)
 }
 
 fn embed_thumbnail_to_audio(
@@ -524,4 +536,40 @@ fn sanitize_filename(filename: &str) -> String {
         .collect::<String>()
         .trim()
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn audio_thumbnail_args_request_high_quality_jpeg_conversion() {
+        let args = audio_thumbnail_args();
+
+        assert!(
+            args.windows(2)
+                .any(|pair| pair[0] == "--convert-thumbnails" && pair[1] == "jpg")
+        );
+        assert!(
+            args.windows(2)
+                .any(|pair| pair[0] == "--ppa" && pair[1] == "ThumbnailsConvertor:-q:v 2")
+        );
+    }
+
+    #[test]
+    fn crop_thumbnail_image_to_square_preserves_largest_possible_square() {
+        let path = std::env::temp_dir().join(format!(
+            "rust-yt-thumbnail-test-{}.jpg",
+            std::process::id()
+        ));
+        let image = image::DynamicImage::ImageRgb8(image::RgbImage::new(80, 50));
+        save_jpeg_with_quality(&image, &path, THUMBNAIL_JPEG_QUALITY).unwrap();
+
+        crop_thumbnail_image_to_square(&path).unwrap();
+
+        let cropped = image::open(&path).unwrap();
+        assert_eq!(cropped.dimensions(), (50, 50));
+
+        let _ = fs::remove_file(path);
+    }
 }

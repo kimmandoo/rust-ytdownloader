@@ -20,7 +20,7 @@ toml = "0.8"
 rust-i18n = "3"
 sys-locale = "0.3"
 
-[build-dependencies]
+[target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
 
 

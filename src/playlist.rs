@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use crate::dependencies;
 
 /// 플레이리스트 또는 단일 영상 정보
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,19 +76,17 @@ struct YtDlpEntry {
 
 /// yt-dlp 경로 가져오기
 pub fn get_ytdlp_path() -> std::path::PathBuf {
-    #[cfg(target_os = "windows")]
-    {
-        let app_dir = dirs::data_local_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("rust-yt");
-        app_dir.join("yt-dlp.exe")
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::path::PathBuf::from("yt-dlp")
-    }
+    let managed = dependencies::ytdlp_path();
+
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    return dependencies::fallback_command(&managed, "yt-dlp");
+
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
+        if managed.exists() {
+            return managed;
+        }
+
         let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/home"));
         let pipx_path = std::path::PathBuf::from(format!("{}/.local/bin/yt-dlp", home));
         if pipx_path.exists() {
