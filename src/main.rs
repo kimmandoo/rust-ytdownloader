@@ -421,6 +421,371 @@ impl MyApp {
             self.download_log.drain(0..overflow);
         }
     }
+
+    fn section_frame() -> egui::Frame {
+        egui::Frame::new()
+            .fill(egui::Color32::from_rgb(255, 255, 255))
+            .stroke(egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgb(226, 230, 238),
+            ))
+            .corner_radius(8)
+            .inner_margin(egui::Margin::symmetric(14, 12))
+    }
+
+    fn render_app_header(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        ui.heading(rust_i18n::t!("main.title"));
+        ui.add_space(8.0);
+
+        Self::section_frame().show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(rust_i18n::t!("main.language_label"));
+                let current_locale = rust_i18n::locale().to_string();
+                let mut selected_locale = current_locale.clone();
+
+                egui::ComboBox::from_id_salt("lang_combo")
+                    .selected_text(match selected_locale.as_str() {
+                        "en" => "English",
+                        "ko" => "한국어",
+                        "ja" => "日本語",
+                        "zh-CN" => "中文",
+                        _ => "English",
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut selected_locale, "en".to_string(), "English");
+                        ui.selectable_value(&mut selected_locale, "ko".to_string(), "한국어");
+                        ui.selectable_value(&mut selected_locale, "ja".to_string(), "日本語");
+                        ui.selectable_value(&mut selected_locale, "zh-CN".to_string(), "中文");
+                    });
+
+                ui.separator();
+                ui.label("yt-dlp");
+                let previous_channel = self.ytdlp_channel;
+                egui::ComboBox::from_id_salt("ytdlp_channel_combo")
+                    .selected_text(self.ytdlp_channel.as_str())
+                    .show_ui(ui, |ui| {
+                        for channel in YtDlpChannel::ALL {
+                            ui.selectable_value(&mut self.ytdlp_channel, channel, channel.as_str());
+                        }
+                    });
+
+                if selected_locale != current_locale {
+                    rust_i18n::set_locale(&selected_locale);
+                    self.save_config();
+                }
+                if previous_channel != self.ytdlp_channel {
+                    self.save_config();
+                }
+            });
+
+            ui.add_space(10.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.add(
+                    egui::Label::new(rust_i18n::t!(
+                        "main.save_path",
+                        path = self.download_dir.display()
+                    ))
+                    .wrap(),
+                );
+                if ui.button(rust_i18n::t!("main.change_btn")).clicked() {
+                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                        self.download_dir = path.clone();
+                        self.save_config();
+                    }
+                }
+            });
+
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                ui.label(rust_i18n::t!("main.url_label"));
+                if self.state.is_input()
+                    || matches!(self.state, AppState::Ready | AppState::Finished)
+                {
+                    let edit_width = (ui.available_width() - 104.0).max(180.0);
+                    let text_edit = ui.add_sized(
+                        [edit_width, ui.spacing().interact_size.y],
+                        egui::TextEdit::singleline(&mut self.url),
+                    );
+                    if ui.button(rust_i18n::t!("main.analyze_btn")).clicked()
+                        || (text_edit.lost_focus()
+                            && ctx.input(|i| i.key_pressed(egui::Key::Enter)))
+                    {
+                        if !self.url.trim().is_empty() {
+                            self.start_analysis();
+                        }
+                    }
+                } else {
+                    ui.add_sized(
+                        [
+                            ui.available_width().max(180.0),
+                            ui.spacing().interact_size.y,
+                        ],
+                        egui::TextEdit::singleline(&mut self.url),
+                    );
+                }
+            });
+
+            ui.add_space(10.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.label(rust_i18n::t!("main.format_label"));
+                let prev_format = self.format.clone();
+                egui::ComboBox::from_id_salt("format_combo")
+                    .selected_text(match self.format {
+                        DownloadFormat::Mp3 => rust_i18n::t!("formats.audio_mp3"),
+                        DownloadFormat::Wav => rust_i18n::t!("formats.audio_wav"),
+                        DownloadFormat::M4a => rust_i18n::t!("formats.audio_m4a"),
+                        DownloadFormat::Flac => rust_i18n::t!("formats.audio_flac"),
+                        DownloadFormat::Mp4 => rust_i18n::t!("formats.video_mp4"),
+                        DownloadFormat::Webm => rust_i18n::t!("formats.video_webm"),
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.format,
+                            DownloadFormat::Mp3,
+                            rust_i18n::t!("formats.audio_mp3"),
+                        );
+                        ui.selectable_value(
+                            &mut self.format,
+                            DownloadFormat::Wav,
+                            rust_i18n::t!("formats.audio_wav"),
+                        );
+                        ui.selectable_value(
+                            &mut self.format,
+                            DownloadFormat::M4a,
+                            rust_i18n::t!("formats.audio_m4a"),
+                        );
+                        ui.selectable_value(
+                            &mut self.format,
+                            DownloadFormat::Flac,
+                            rust_i18n::t!("formats.audio_flac"),
+                        );
+                        ui.separator();
+                        ui.selectable_value(
+                            &mut self.format,
+                            DownloadFormat::Mp4,
+                            rust_i18n::t!("formats.video_mp4"),
+                        );
+                        ui.selectable_value(
+                            &mut self.format,
+                            DownloadFormat::Webm,
+                            rust_i18n::t!("formats.video_webm"),
+                        );
+                    });
+
+                if prev_format != self.format {
+                    self.save_config();
+                }
+            });
+
+            if matches!(self.state, AppState::Analyzing) {
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.add(egui::Label::new(rust_i18n::t!("main.analyzing_msg")).wrap());
+                });
+            }
+        });
+    }
+
+    fn render_work_area(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        Self::section_frame().show(ui, |ui| {
+            if let Some(info) = &mut self.playlist_info {
+                ui.heading(&info.title);
+
+                if info.is_playlist {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(rust_i18n::t!(
+                            "main.total_videos",
+                            count = info.entries.len()
+                        ));
+                        if ui.button(rust_i18n::t!("main.select_all")).clicked() {
+                            for entry in &mut info.entries {
+                                entry.selected = true;
+                            }
+                        }
+                        if ui.button(rust_i18n::t!("main.deselect_all")).clicked() {
+                            for entry in &mut info.entries {
+                                entry.selected = false;
+                            }
+                        }
+                    });
+                    ui.add_space(10.0);
+                }
+
+                if info.is_playlist {
+                    for (idx, entry) in info.entries.iter_mut().enumerate() {
+                        Self::video_row_frame().show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.checkbox(&mut entry.selected, "");
+
+                                if let Some(thumb_url) = &entry.thumbnail {
+                                    Self::add_square_thumbnail(ui, ctx, thumb_url, 50.0);
+                                }
+
+                                ui.vertical(|ui| {
+                                    ui.add(
+                                        egui::Label::new(format!("{}. {}", idx + 1, entry.title))
+                                            .wrap(),
+                                    );
+                                    ui.label(egui::RichText::new(entry.format_duration()).weak());
+                                });
+                            });
+                        });
+                        ui.add_space(6.0);
+                    }
+                } else if let Some(entry) = info.entries.first_mut() {
+                    Self::video_row_frame().show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            if let Some(thumb_url) = &entry.thumbnail {
+                                Self::add_square_thumbnail(ui, ctx, thumb_url, 100.0);
+                            }
+                            ui.vertical(|ui| {
+                                ui.add(
+                                    egui::Label::new(rust_i18n::t!(
+                                        "main.video_title",
+                                        title = entry.title
+                                    ))
+                                    .wrap(),
+                                );
+                                ui.add(
+                                    egui::Label::new(rust_i18n::t!(
+                                        "main.video_duration",
+                                        duration = entry.format_duration()
+                                    ))
+                                    .wrap(),
+                                );
+                            });
+                        });
+                    });
+                }
+            } else if !matches!(self.state, AppState::Analyzing) {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(40.0);
+                    ui.add(egui::Label::new(rust_i18n::t!("main.input_url_hint")).wrap());
+                    ui.add_space(40.0);
+                });
+            }
+        });
+    }
+
+    fn video_row_frame() -> egui::Frame {
+        egui::Frame::new()
+            .fill(egui::Color32::from_rgb(255, 255, 255))
+            .stroke(egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgb(230, 233, 240),
+            ))
+            .corner_radius(6)
+            .inner_margin(egui::Margin::symmetric(10, 8))
+    }
+
+    fn render_status_area(&mut self, ui: &mut egui::Ui) {
+        Self::section_frame().show(ui, |ui| {
+            if let Some(err) = &self.error_msg {
+                ui.colored_label(
+                    egui::Color32::from_rgb(200, 42, 42),
+                    rust_i18n::t!("main.error_prefix", msg = err),
+                );
+                ui.add_space(8.0);
+            }
+
+            match self.state {
+                AppState::Ready => {
+                    let btn_text = if let Some(info) = &self.playlist_info {
+                        let count = info.entries.iter().filter(|e| e.selected).count();
+                        if count > 0 {
+                            rust_i18n::t!("main.download_start_count", count = count)
+                        } else {
+                            rust_i18n::t!("main.no_selection")
+                        }
+                    } else {
+                        rust_i18n::t!("main.need_analysis")
+                    };
+
+                    if self.playlist_info.is_some() {
+                        if ui.button(btn_text).clicked() {
+                            if let Err(e) = self.start_download() {
+                                self.error_msg = Some(e);
+                            }
+                        }
+                    }
+                }
+                AppState::Downloading => {
+                    ui.label(rust_i18n::t!(
+                        "main.downloading_status",
+                        current = self.current_download_idx + 1,
+                        total = self.download_queue.len()
+                    ));
+                    if self.current_download_idx < self.download_queue.len() {
+                        ui.add(
+                            egui::Label::new(&self.download_queue[self.current_download_idx].title)
+                                .wrap(),
+                        );
+                    }
+                    ui.add_space(8.0);
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(&self.progress_text).strong()).wrap(),
+                    );
+                    ui.add_space(4.0);
+                    ui.add(
+                        egui::ProgressBar::new(self.progress as f32)
+                            .animate(true)
+                            .desired_height(8.0)
+                            .corner_radius(4),
+                    );
+
+                    ui.add_space(10.0);
+                    egui::Frame::new()
+                        .fill(egui::Color32::from_rgb(250, 251, 253))
+                        .stroke(egui::Stroke::new(
+                            1.0,
+                            egui::Color32::from_rgb(226, 230, 238),
+                        ))
+                        .corner_radius(6)
+                        .inner_margin(egui::Margin::symmetric(10, 8))
+                        .show(ui, |ui| {
+                            for line in self.download_log.iter().rev().take(12).rev() {
+                                ui.add(
+                                    egui::Label::new(egui::RichText::new(line).monospace().weak())
+                                        .wrap(),
+                                );
+                            }
+                        });
+
+                    ui.add_space(10.0);
+                    if ui.button(rust_i18n::t!("main.stop_download_btn")).clicked() {
+                        self.stop_download();
+                    }
+                }
+                AppState::Finished => {
+                    ui.label(rust_i18n::t!("main.all_completed"));
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button(rust_i18n::t!("main.open_folder_btn")).clicked() {
+                            #[cfg(target_os = "linux")]
+                            let _ = std::process::Command::new("xdg-open")
+                                .arg(&self.download_dir)
+                                .spawn();
+                            #[cfg(target_os = "windows")]
+                            let _ = std::process::Command::new("explorer")
+                                .arg(&self.download_dir)
+                                .spawn();
+                            #[cfg(target_os = "macos")]
+                            let _ = std::process::Command::new("open")
+                                .arg(&self.download_dir)
+                                .spawn();
+                        }
+
+                        if ui.button(rust_i18n::t!("main.back_to_list_btn")).clicked() {
+                            self.state = AppState::Ready;
+                            self.current_download_idx = 0;
+                            self.progress = 0.0;
+                        }
+                    });
+                }
+                _ => {}
+            }
+        });
+    }
 }
 
 impl eframe::App for MyApp {
@@ -575,410 +940,18 @@ impl eframe::App for MyApp {
         }
 
         // 1. Top Panel (설정 및 입력)
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            ui.add_space(5.0);
-            ui.heading(rust_i18n::t!("main.title"));
-            ui.add_space(5.0);
-
-            // [NEW] 언어 선택
-            ui.horizontal_wrapped(|ui| {
-                ui.label(rust_i18n::t!("main.language_label"));
-                let current_locale = rust_i18n::locale().to_string();
-                let mut selected_locale = current_locale.clone();
-
-                egui::ComboBox::from_id_salt("lang_combo")
-                    .selected_text(match selected_locale.as_str() {
-                        "en" => "English",
-                        "ko" => "한국어",
-                        "ja" => "日本語",
-                        "zh-CN" => "中文 (简体)",
-                        _ => "English", // Default fallback
-                    })
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut selected_locale, "en".to_string(), "English");
-                        ui.selectable_value(&mut selected_locale, "ko".to_string(), "한국어");
-                        ui.selectable_value(&mut selected_locale, "ja".to_string(), "日本語");
-                        ui.selectable_value(
-                            &mut selected_locale,
-                            "zh-CN".to_string(),
-                            "中文 (简体)",
-                        );
-                    });
-
-                if selected_locale != current_locale {
-                    rust_i18n::set_locale(&selected_locale);
-                    // 설정 저장
-                    self.save_config();
-                }
-            });
-
-            ui.horizontal_wrapped(|ui| {
-                ui.label("yt-dlp Channel:");
-                let previous_channel = self.ytdlp_channel;
-
-                egui::ComboBox::from_id_salt("ytdlp_channel_combo")
-                    .selected_text(self.ytdlp_channel.as_str())
-                    .show_ui(ui, |ui| {
-                        for channel in YtDlpChannel::ALL {
-                            ui.selectable_value(&mut self.ytdlp_channel, channel, channel.as_str());
-                        }
-                    });
-
-                if previous_channel != self.ytdlp_channel {
-                    self.save_config();
-                }
-            });
-
-            ui.separator();
-
-            // 경로 등
-            ui.horizontal_wrapped(|ui| {
-                ui.add(
-                    egui::Label::new(rust_i18n::t!(
-                        "main.save_path",
-                        path = self.download_dir.display()
-                    ))
-                    .wrap(),
-                );
-                if ui.button(rust_i18n::t!("main.change_btn")).clicked() {
-                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                        self.download_dir = path.clone();
-                        // 설정 저장
-                        self.save_config();
-                    }
-                }
-            });
-            ui.separator();
-
-            // URL 입력
-            ui.horizontal(|ui| {
-                ui.label(rust_i18n::t!("main.url_label"));
-                if self.state.is_input()
-                    || matches!(self.state, AppState::Ready | AppState::Finished)
-                {
-                    let edit_width = (ui.available_width() - 96.0).max(120.0);
-                    let text_edit = ui.add_sized(
-                        [edit_width, ui.spacing().interact_size.y],
-                        egui::TextEdit::singleline(&mut self.url),
-                    );
-                    if ui.button(rust_i18n::t!("main.analyze_btn")).clicked()
-                        || (text_edit.lost_focus()
-                            && ctx.input(|i| i.key_pressed(egui::Key::Enter)))
-                    {
-                        if !self.url.trim().is_empty() {
-                            self.start_analysis();
-                        }
-                    }
-                } else {
-                    ui.add_sized(
-                        [
-                            ui.available_width().max(120.0),
-                            ui.spacing().interact_size.y,
-                        ],
-                        egui::TextEdit::singleline(&mut self.url),
-                    );
-                }
-            });
-
-            ui.add_space(5.0);
-
-            // 형식 선택
-            ui.horizontal_wrapped(|ui| {
-                ui.label(rust_i18n::t!("main.format_label"));
-                let prev_format = self.format.clone();
-                egui::ComboBox::from_id_salt("format_combo")
-                    .selected_text(match self.format {
-                        DownloadFormat::Mp3 => rust_i18n::t!("formats.audio_mp3"),
-                        DownloadFormat::Wav => rust_i18n::t!("formats.audio_wav"),
-                        DownloadFormat::M4a => rust_i18n::t!("formats.audio_m4a"),
-                        DownloadFormat::Flac => rust_i18n::t!("formats.audio_flac"),
-                        DownloadFormat::Mp4 => rust_i18n::t!("formats.video_mp4"),
-                        DownloadFormat::Webm => rust_i18n::t!("formats.video_webm"),
-                    })
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut self.format,
-                            DownloadFormat::Mp3,
-                            rust_i18n::t!("formats.audio_mp3"),
-                        );
-                        ui.selectable_value(
-                            &mut self.format,
-                            DownloadFormat::Wav,
-                            rust_i18n::t!("formats.audio_wav"),
-                        );
-                        ui.selectable_value(
-                            &mut self.format,
-                            DownloadFormat::M4a,
-                            rust_i18n::t!("formats.audio_m4a"),
-                        );
-                        ui.selectable_value(
-                            &mut self.format,
-                            DownloadFormat::Flac,
-                            rust_i18n::t!("formats.audio_flac"),
-                        );
-                        ui.separator();
-                        ui.selectable_value(
-                            &mut self.format,
-                            DownloadFormat::Mp4,
-                            rust_i18n::t!("formats.video_mp4"),
-                        );
-                        ui.selectable_value(
-                            &mut self.format,
-                            DownloadFormat::Webm,
-                            rust_i18n::t!("formats.video_webm"),
-                        );
-                    });
-
-                // 포맷 변경 시 설정 저장
-                if prev_format != self.format {
-                    self.save_config();
-                }
-            });
-
-            // 로딩 상태 (Top Panel에 표시)
-            if matches!(self.state, AppState::Analyzing) {
-                ui.add_space(5.0);
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label(rust_i18n::t!("main.analyzing_msg"));
-                });
-            }
-
-            ui.add_space(5.0);
-        });
-
-        // 2. Bottom Panel (액션, 상태, 프로그레스)
-        egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
-            ui.add_space(5.0);
-
-            // 에러 메시지
-            if let Some(err) = &self.error_msg {
-                ui.colored_label(
-                    egui::Color32::RED,
-                    rust_i18n::t!("main.error_prefix", msg = err),
-                );
-                ui.separator();
-            }
-
-            // 다운로드 컨트롤
-            match self.state {
-                AppState::Ready => {
-                    let btn_text = if let Some(info) = &self.playlist_info {
-                        let count = info.entries.iter().filter(|e| e.selected).count();
-                        if count > 0 {
-                            rust_i18n::t!("main.download_start_count", count = count)
-                        } else {
-                            rust_i18n::t!("main.no_selection")
-                        }
-                    } else {
-                        rust_i18n::t!("main.need_analysis")
-                    };
-
-                    // 분석이 완료된 상태에서만 버튼 활성화
-                    if self.playlist_info.is_some() {
-                        if ui.button(btn_text).clicked() {
-                            if let Err(e) = self.start_download() {
-                                self.error_msg = Some(e);
-                            }
-                        }
-                    }
-                }
-                AppState::Downloading => {
-                    ui.label(rust_i18n::t!(
-                        "main.downloading_status",
-                        current = self.current_download_idx + 1,
-                        total = self.download_queue.len()
-                    ));
-                    if self.current_download_idx < self.download_queue.len() {
-                        ui.add(
-                            egui::Label::new(&self.download_queue[self.current_download_idx].title)
-                                .wrap(),
-                        );
-                    }
-                    ui.add_space(5.0);
-                    ui.add(
-                        egui::Label::new(egui::RichText::new(&self.progress_text).strong()).wrap(),
-                    );
-                    ui.add_space(2.0);
-                    ui.add(
-                        egui::ProgressBar::new(self.progress as f32)
-                            .animate(true)
-                            .desired_height(8.0)
-                            .corner_radius(4),
-                    );
-
-                    ui.add_space(5.0);
-                    egui::Frame::new()
-                        .fill(egui::Color32::from_rgb(250, 251, 253))
-                        .stroke(egui::Stroke::new(
-                            1.0,
-                            egui::Color32::from_rgb(226, 230, 238),
-                        ))
-                        .corner_radius(6)
-                        .inner_margin(egui::Margin::symmetric(10, 8))
-                        .show(ui, |ui| {
-                            egui::ScrollArea::vertical()
-                                .max_height(88.0)
-                                .stick_to_bottom(true)
-                                .show(ui, |ui| {
-                                    for line in self.download_log.iter().rev().take(12).rev() {
-                                        ui.add(
-                                            egui::Label::new(
-                                                egui::RichText::new(line).monospace().weak(),
-                                            )
-                                            .wrap(),
-                                        );
-                                    }
-                                });
-                        });
-
-                    ui.add_space(5.0);
-                    if ui.button(rust_i18n::t!("main.stop_download_btn")).clicked() {
-                        self.stop_download();
-                    }
-                }
-                AppState::Finished => {
-                    ui.label(rust_i18n::t!("main.all_completed"));
-                    ui.horizontal_wrapped(|ui| {
-                        if ui.button(rust_i18n::t!("main.open_folder_btn")).clicked() {
-                            #[cfg(target_os = "linux")]
-                            let _ = std::process::Command::new("xdg-open")
-                                .arg(&self.download_dir)
-                                .spawn();
-                            #[cfg(target_os = "windows")]
-                            let _ = std::process::Command::new("explorer")
-                                .arg(&self.download_dir)
-                                .spawn();
-                            #[cfg(target_os = "macos")]
-                            let _ = std::process::Command::new("open")
-                                .arg(&self.download_dir)
-                                .spawn();
-                        }
-
-                        if ui.button(rust_i18n::t!("main.back_to_list_btn")).clicked() {
-                            self.state = AppState::Ready;
-                            self.current_download_idx = 0;
-                            self.progress = 0.0;
-                        }
-                    });
-                }
-                _ => {}
-            }
-            ui.add_space(5.0);
-        });
-
-        // 3. Central Panel (리스트)
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(info) = &mut self.playlist_info {
-                ui.heading(&info.title);
-
-                if info.is_playlist {
-                    ui.horizontal(|ui| {
-                        ui.label(rust_i18n::t!(
-                            "main.total_videos",
-                            count = info.entries.len()
-                        ));
-                        if ui.button(rust_i18n::t!("main.select_all")).clicked() {
-                            for entry in &mut info.entries {
-                                entry.selected = true;
-                            }
-                        }
-                        if ui.button(rust_i18n::t!("main.deselect_all")).clicked() {
-                            for entry in &mut info.entries {
-                                entry.selected = false;
-                            }
-                        }
-                    });
-                    ui.separator();
-                }
-
-                // 스크롤 영역 (최대 높이 제한 제거)
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    if info.is_playlist {
-                        for (idx, entry) in info.entries.iter_mut().enumerate() {
-                            egui::Frame::new()
-                                .fill(egui::Color32::from_rgb(255, 255, 255))
-                                .stroke(egui::Stroke::new(
-                                    1.0,
-                                    egui::Color32::from_rgb(230, 233, 240),
-                                ))
-                                .corner_radius(6)
-                                .inner_margin(egui::Margin::symmetric(10, 8))
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.checkbox(&mut entry.selected, "");
-
-                                        // 썸네일
-                                        if let Some(thumb_url) = &entry.thumbnail {
-                                            Self::add_square_thumbnail(ui, ctx, thumb_url, 50.0);
-                                        }
-
-                                        ui.vertical(|ui| {
-                                            ui.add(
-                                                egui::Label::new(format!(
-                                                    "{}. {}",
-                                                    idx + 1,
-                                                    entry.title
-                                                ))
-                                                .wrap(),
-                                            );
-                                            ui.label(
-                                                egui::RichText::new(entry.format_duration()).weak(),
-                                            );
-                                        });
-                                    });
-                                });
-                            ui.add_space(6.0);
-                        }
-                    } else {
-                        // 단일 영상도 동일한 리스트 형태로 표시
-                        if let Some(entry) = info.entries.first_mut() {
-                            egui::Frame::new()
-                                .fill(egui::Color32::from_rgb(255, 255, 255))
-                                .stroke(egui::Stroke::new(
-                                    1.0,
-                                    egui::Color32::from_rgb(230, 233, 240),
-                                ))
-                                .corner_radius(6)
-                                .inner_margin(egui::Margin::symmetric(12, 10))
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        // 단일 영상은 체크박스 굳이 필요 없지만 일관성 유지 or 숨김
-                                        // ui.checkbox(&mut entry.selected, "");
-
-                                        if let Some(thumb_url) = &entry.thumbnail {
-                                            Self::add_square_thumbnail(ui, ctx, thumb_url, 100.0);
-                                        }
-                                        ui.vertical(|ui| {
-                                            ui.add(
-                                                egui::Label::new(rust_i18n::t!(
-                                                    "main.video_title",
-                                                    title = entry.title
-                                                ))
-                                                .wrap(),
-                                            );
-                                            ui.add(
-                                                egui::Label::new(rust_i18n::t!(
-                                                    "main.video_duration",
-                                                    duration = entry.format_duration()
-                                                ))
-                                                .wrap(),
-                                            );
-                                        });
-                                    });
-                                });
-                        }
-                    }
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    self.render_app_header(ui, ctx);
+                    ui.add_space(12.0);
+                    self.render_work_area(ui, ctx);
+                    ui.add_space(12.0);
+                    self.render_status_area(ui);
+                    ui.add_space(12.0);
                 });
-            } else {
-                // 정보 없을 때 안내 문구
-                if !matches!(self.state, AppState::Analyzing) {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(50.0);
-                        ui.add(egui::Label::new(rust_i18n::t!("main.input_url_hint")).wrap());
-                    });
-                }
-            }
         });
 
         // 애니메이션 효과를 위해 지속적 갱신 필요시 (다운로드 중일 때)
