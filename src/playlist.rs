@@ -117,7 +117,7 @@ fn fetch_playlist_info_with_retry(
     let ytdlp = get_ytdlp_path();
 
     let mut command = Command::new(&ytdlp);
-    command.args(["--flat-playlist", "-J", "--no-warnings", url]);
+    command.args(playlist_info_args(url));
 
     #[cfg(target_os = "windows")]
     {
@@ -201,5 +201,31 @@ fn fetch_playlist_info_with_retry(
             entries: vec![entry],
             is_playlist: false,
         })
+    }
+}
+
+fn playlist_info_args(url: &str) -> Vec<&str> {
+    vec![
+        "--flat-playlist",
+        "-J",
+        "--no-warnings",
+        "--socket-timeout",
+        crate::ytdlp::YTDLP_SOCKET_TIMEOUT_SECS,
+        url,
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn playlist_info_uses_30_second_socket_timeout() {
+        let args = playlist_info_args("https://youtu.be/example");
+
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--socket-timeout", "30"])
+        );
     }
 }

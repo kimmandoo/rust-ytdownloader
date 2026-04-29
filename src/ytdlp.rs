@@ -3,6 +3,8 @@ use std::process::Command;
 
 pub type YtDlpResult<T> = Result<T, String>;
 
+pub const YTDLP_SOCKET_TIMEOUT_SECS: &str = "30";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum YtDlpUpdateTarget {
     Current,

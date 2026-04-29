@@ -30,6 +30,7 @@ pub struct DownloadConfig {
 pub enum DownloadStatus {
     Starting(String),      // message
     Progress(f64, String), // percent, speed/status
+    Message(String),
     Converting,
     Completed(String), // filename
     Failed(String),    // error message
@@ -69,7 +70,7 @@ pub fn download_video(
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     let new_path = std::env::var("PATH").unwrap_or_default();
 
-    let output_template = match config.format {
+    let output_template = match &config.format {
         DownloadFormat::Mp3 | DownloadFormat::Wav | DownloadFormat::M4a | DownloadFormat::Flac => {
             config
                 .output_dir
@@ -86,19 +87,21 @@ pub fn download_video(
         "--no-playlist".to_string(),
         "--newline".to_string(),
         "--progress".to_string(),
+        "--socket-timeout".to_string(),
+        crate::ytdlp::YTDLP_SOCKET_TIMEOUT_SECS.to_string(),
         "--add-metadata".to_string(), // [NEW] 메타데이터 포함
         "-o".to_string(),
         output_str,
     ];
 
-    match config.format {
+    match &config.format {
         DownloadFormat::Mp3 => {
             args.extend_from_slice(&[
                 "-x".to_string(),
                 "--audio-format".to_string(),
                 "mp3".to_string(),
                 "--audio-quality".to_string(),
-                config.audio_quality,
+                config.audio_quality.clone(),
                 "--write-thumbnail".to_string(),
                 "--convert-thumbnails".to_string(),
                 "jpg".to_string(),
@@ -153,7 +156,7 @@ pub fn download_video(
     }
 
     // URL은 마지막에 추가
-    args.push(config.url);
+    args.push(config.url.clone());
 
     let _ = tx.send(DownloadStatus::Starting("다운로드 시작...".to_string()));
 
@@ -208,10 +211,12 @@ pub fn download_video(
 
     let stderr_tail = Arc::new(Mutex::new(Vec::<String>::new()));
     let stderr_tail_for_thread = stderr_tail.clone();
+    let tx_for_stderr = tx.clone();
     let stderr_reader_handle = thread::spawn(move || {
         if let Some(err) = stderr {
             let reader = BufReader::new(err);
             for line in reader.lines().map_while(Result::ok) {
+                send_ytdlp_message(&tx_for_stderr, &line);
                 let mut tail = stderr_tail_for_thread.lock().unwrap();
                 tail.push(line);
                 if tail.len() > 5 {
@@ -240,8 +245,14 @@ pub fn download_video(
                                 .unwrap_or("")
                                 .to_string();
                             let _ = tx.send(DownloadStatus::Progress(percent, speed));
+                        } else {
+                            send_ytdlp_message(&tx, &line);
                         }
+                    } else {
+                        send_ytdlp_message(&tx, &line);
                     }
+                } else {
+                    send_ytdlp_message(&tx, &line);
                 }
 
                 if line.contains("[ExtractAudio]") || line.contains("[Merger]") {
@@ -273,6 +284,13 @@ pub fn download_video(
                         detected_audio_output,
                     );
 
+                    if !output_file.exists() {
+                        let _ = tx.send(DownloadStatus::Failed(
+                            "다운로드된 오디오 파일을 찾지 못했습니다.".to_string(),
+                        ));
+                        return;
+                    }
+
                     match resolve_thumbnail_path(&output_file, &config.output_dir, &sanitized_title)
                     {
                         Some(thumb_file) => {
@@ -282,19 +300,17 @@ pub fn download_video(
                                     let _ = fs::remove_file(thumb_file);
                                 }
                                 Err(err) => {
-                                    let _ = tx.send(DownloadStatus::Failed(format!(
+                                    let _ = tx.send(DownloadStatus::Message(format!(
                                         "앨범아트 임베드 실패: {}",
                                         err
                                     )));
-                                    return;
                                 }
                             }
                         }
                         None => {
-                            let _ = tx.send(DownloadStatus::Failed(
+                            let _ = tx.send(DownloadStatus::Message(
                                 "앨범아트 파일을 찾지 못했습니다".to_string(),
                             ));
-                            return;
                         }
                     }
                 }
@@ -320,6 +336,13 @@ pub fn download_video(
                 let _ = tx.send(DownloadStatus::Failed("프로세스 대기 오류".to_string()));
             }
         }
+    }
+}
+
+fn send_ytdlp_message(tx: &Sender<DownloadStatus>, line: &str) {
+    let line = line.trim();
+    if !line.is_empty() {
+        let _ = tx.send(DownloadStatus::Message(line.to_string()));
     }
 }
 
