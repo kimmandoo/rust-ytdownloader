@@ -1,69 +1,56 @@
-# YouTube Downloader built with Rust
+# YouTube Downloader
 
-A modern, cross-platform YouTube downloader built with Rust and egui.
+A cross-platform YouTube downloader with a Rust core and a Tauri desktop UI.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Build Status](https://github.com/kimmandoo/rust-ytdownloader/actions/workflows/release.yml/badge.svg)
 
-## 🚀 Features
+## Features
 
-- **Modern GUI**: Clean and responsive user interface built with `egui`.
-- **Cross-Platform**: Works on Linux, Windows, and macOS.
-- **Auto-Setup**: Automatically downloads necessary dependencies (`yt-dlp`, `ffmpeg`) on first run. No complex manual setup required.
-- **Multiple Formats**:
-  - Audio: MP3, WAV, M4A, FLAC
-  - Video: MP4, WEBM
-- **Playlist Support**: Download entire playlists or select specific videos.
-- **Metadata Embedding**: Automatically adds thumbnails and metadata to downloaded files.
+- Tauri desktop app with a polished, scrollable WebView UI.
+- Rust download core using `yt-dlp`, `ffmpeg`, and Deno setup.
+- Audio formats: MP3, WAV, M4A, FLAC.
+- Video formats: MP4, WEBM.
+- Playlist analysis with per-video selection.
+- Visible progress, recent logs, stop control, and download folder shortcuts.
 
-## 📦 Installation
-
-Download the latest release for your platform from the [Releases Page](https://github.com/kimmandoo/rust-ytdownloader/releases).
-
-### Supported Platforms
-- **Windows**: `x86_64`
-- **Linux**: `x86_64`
-- **macOS**: `Intel` & `Apple Silicon`
-
-## 🛠️ Usage
-
-1. Run the application.
-2. On first launch, wait for the initialization to complete (downloads `yt-dlp` and `ffmpeg`).
-3. Select a download folder.
-4. Paste a YouTube URL and click **Analyze**.
-5. Select the format and quality, then click **Download**.
-
-## ⚠️ Legal Disclaimer & Terms of Service
-
-**Please read this section carefully before using this software.**
-
-This project is for **educational purposes only**. The developers of this software functionality do not endorse or encourage any potential violation of YouTube's Terms of Service or copyright laws.
-
-1. **Personal Use Only**: This tool is intended strictly for personal, private use (e.g., time-shifting, formatting shifting). Any commercial use or redistribution of downloaded content is strictly prohibited.
-2. **Copyright Compliance**: Users are responsible for ensuring that they have the right to download any content. Do not download copyrighted material without permission from the copyright holder.
-3. **YouTube Terms of Service**: Downloading content from YouTube may violate their [Terms of Service](https://www.youtube.com/t/terms). Specifically, the ToS may prohibit downloading content unless a download button or similar link is displayed by YouTube on the Service for that Content.
-4. **No Liability**: The authors and contributors of this project are not liable for any misuse of this software or any legal consequences arising from its use. The user assumes full responsibility for their actions.
-
----
-
-## 🏗️ Development
+## Development
 
 ### Prerequisites
-- Rust (latest stable)
-- `libssl-dev`, `pkg-config` (Linux)
-- `cmake` (System)
 
-### Build
+- Rust stable
+- Node.js and npm
+- Windows: Visual Studio Build Tools with MSVC and Windows SDK
+- Linux: Tauri system dependencies such as WebKitGTK, OpenSSL, and build tools
+
+### Run the Tauri App
+
 ```bash
-cargo run
+npm install
+npm run tauri dev
 ```
 
-### Build for Release
+### Build the Tauri App
+
 ```bash
-cargo build --release
-cargo build --release --target x86_64-pc-windows-gnu # for windows
+npm run tauri build
 ```
 
-## 📄 License
+The Windows build produces a native `.exe` and installer artifacts through Tauri.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### Frontend Only
+
+```bash
+npm run dev
+npm run build
+```
+
+The frontend dev server runs at `http://127.0.0.1:1420`.
+
+## Legal Disclaimer
+
+This project is for educational and personal use only. Users are responsible for complying with YouTube's Terms of Service and copyright law. Do not download copyrighted material unless you have the right to do so.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

@@ -1,0 +1,19 @@
+{
+  "name": "rust-ytdownloader-tauri",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1420 ui",
+    "build": "vite build ui",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.8.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12"
+  }
+}
