@@ -93,6 +93,7 @@ pub fn download_video(
         "-o".to_string(),
         output_str,
     ];
+    args.extend(crate::ytdlp::js_runtime_args());
 
     match &config.format {
         DownloadFormat::Mp3 => {

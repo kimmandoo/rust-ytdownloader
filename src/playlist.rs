@@ -204,15 +204,17 @@ fn fetch_playlist_info_with_retry(
     }
 }
 
-fn playlist_info_args(url: &str) -> Vec<&str> {
-    vec![
-        "--flat-playlist",
-        "-J",
-        "--no-warnings",
-        "--socket-timeout",
-        crate::ytdlp::YTDLP_SOCKET_TIMEOUT_SECS,
-        url,
-    ]
+fn playlist_info_args(url: &str) -> Vec<String> {
+    let mut args = vec![
+        "--flat-playlist".to_string(),
+        "-J".to_string(),
+        "--no-warnings".to_string(),
+        "--socket-timeout".to_string(),
+        crate::ytdlp::YTDLP_SOCKET_TIMEOUT_SECS.to_string(),
+    ];
+    args.extend(crate::ytdlp::js_runtime_args());
+    args.push(url.to_string());
+    args
 }
 
 #[cfg(test)]

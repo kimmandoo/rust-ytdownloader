@@ -41,7 +41,16 @@ pub fn init_dependencies(
         }
     }
 
-    // 2. Check ffmpeg
+    // 2. Check Deno for yt-dlp's YouTube JavaScript challenge support
+    let deno_path = get_deno_path(&app_dir);
+    if !is_supported_deno(&deno_path) {
+        if let Err(e) = download_deno(&app_dir, &tx) {
+            let _ = tx.send(InitStatus::Failed(format!("Deno 다운로드 실패: {}", e)));
+            return;
+        }
+    }
+
+    // 3. Check ffmpeg
     let ffmpeg_path = get_ffmpeg_path(&app_dir);
     if !ffmpeg_path.exists() {
         if let Err(e) = download_ffmpeg(&app_dir, &tx) {
@@ -52,7 +61,7 @@ pub fn init_dependencies(
         }
     }
 
-    // 3. Update Check (Non-fatal)
+    // 4. Update Check (Non-fatal)
     // yt-dlp 업데이트 확인
     let _ = tx.send(InitStatus::Starting(
         rust_i18n::t!("initialization.ytdlp_update_check").to_string(),
@@ -137,6 +146,50 @@ fn get_ffmpeg_path(app_dir: &Path) -> PathBuf {
     return app_dir.join("ffmpeg.exe");
     #[cfg(not(target_os = "windows"))]
     return app_dir.join("ffmpeg");
+}
+
+fn get_deno_path(app_dir: &Path) -> PathBuf {
+    #[cfg(target_os = "windows")]
+    return app_dir.join("deno.exe");
+    #[cfg(not(target_os = "windows"))]
+    return app_dir.join("deno");
+}
+
+fn is_supported_deno(deno_path: &Path) -> bool {
+    if !deno_path.exists() {
+        return false;
+    }
+
+    let mut cmd = Command::new(deno_path);
+    cmd.arg("--version");
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+
+    let Ok(output) = cmd.output() else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let Some(version) = stdout
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+    else {
+        return false;
+    };
+
+    version
+        .split('.')
+        .next()
+        .and_then(|major| major.parse::<u32>().ok())
+        .is_some_and(|major| major >= 2)
 }
 
 fn download_file(
@@ -246,6 +299,93 @@ fn download_ytdlp(app_dir: &Path, tx: &std::sync::mpsc::Sender<InitStatus>) -> V
     }
 
     Ok(())
+}
+
+fn download_deno(app_dir: &Path, tx: &std::sync::mpsc::Sender<InitStatus>) -> ValidatedResult<()> {
+    let url = deno_download_url()?;
+    let archive_path = app_dir.join("deno.zip");
+    download_file(url, &archive_path, tx, "deno")?;
+
+    let _ = tx.send(InitStatus::Extracting("Deno 압축 해제 중...".to_string()));
+
+    let file = fs::File::open(&archive_path).map_err(|e| e.to_string())?;
+    let mut archive = ZipArchive::new(file).map_err(|e| e.to_string())?;
+    let dest_path = get_deno_path(app_dir);
+    let mut extracted = false;
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        let name = file.name().replace('\\', "/");
+        if !(name == "deno"
+            || name == "deno.exe"
+            || name.ends_with("/deno")
+            || name.ends_with("/deno.exe"))
+        {
+            continue;
+        }
+
+        let mut outfile = fs::File::create(&dest_path).map_err(|e| e.to_string())?;
+        copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
+        extracted = true;
+        break;
+    }
+
+    let _ = fs::remove_file(&archive_path);
+
+    if !extracted {
+        return Err("Deno 실행 파일을 압축 파일에서 찾지 못했습니다".to_string());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&dest_path)
+            .map_err(|e| e.to_string())?
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&dest_path, perms).map_err(|e| e.to_string())?;
+    }
+
+    if !is_supported_deno(&dest_path) {
+        return Err("설치된 Deno가 yt-dlp 요구 버전(2.x 이상)을 만족하지 않습니다".to_string());
+    }
+
+    Ok(())
+}
+
+fn deno_download_url() -> ValidatedResult<&'static str> {
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    {
+        return Ok(
+            "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip",
+        );
+    }
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        return Ok(
+            "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip",
+        );
+    }
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    {
+        return Ok(
+            "https://github.com/denoland/deno/releases/latest/download/deno-aarch64-unknown-linux-gnu.zip",
+        );
+    }
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    {
+        return Ok(
+            "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-apple-darwin.zip",
+        );
+    }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        return Ok(
+            "https://github.com/denoland/deno/releases/latest/download/deno-aarch64-apple-darwin.zip",
+        );
+    }
+    #[allow(unreachable_code)]
+    Err("지원하지 않는 플랫폼입니다".to_string())
 }
 
 fn download_ffmpeg(

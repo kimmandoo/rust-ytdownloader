@@ -18,6 +18,7 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([600.0, 500.0])
+            .with_min_inner_size([480.0, 360.0])
             .with_resizable(true)
             .with_icon(load_icon()),
         ..Default::default()
@@ -28,6 +29,7 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(|cc| {
             setup_custom_fonts(&cc.egui_ctx);
+            setup_app_style(&cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx); // [NEW] 이미지 로더 설치
             Ok(Box::new(MyApp::default()))
         }),
@@ -98,6 +100,35 @@ fn setup_custom_fonts(ctx: &egui::Context) {
     monospace.insert(2, "NotoSansSC".to_owned());
 
     ctx.set_fonts(fonts);
+}
+
+fn setup_app_style(ctx: &egui::Context) {
+    let mut visuals = egui::Visuals::light();
+    visuals.panel_fill = egui::Color32::from_rgb(246, 247, 249);
+    visuals.window_fill = egui::Color32::from_rgb(255, 255, 255);
+    visuals.faint_bg_color = egui::Color32::from_rgb(239, 241, 245);
+    visuals.extreme_bg_color = egui::Color32::from_rgb(232, 235, 240);
+    visuals.selection.bg_fill = egui::Color32::from_rgb(0, 122, 255);
+    visuals.selection.stroke.color = egui::Color32::WHITE;
+    visuals.hyperlink_color = egui::Color32::from_rgb(0, 102, 204);
+    visuals.widgets.noninteractive.corner_radius = egui::CornerRadius::same(6);
+    visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(6);
+    visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(6);
+    visuals.widgets.active.corner_radius = egui::CornerRadius::same(6);
+    visuals.widgets.open.corner_radius = egui::CornerRadius::same(6);
+    visuals.widgets.inactive.bg_stroke =
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(216, 220, 228));
+    visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(236, 242, 252);
+    visuals.widgets.hovered.bg_stroke =
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(174, 199, 238));
+    ctx.set_visuals(visuals);
+
+    ctx.all_styles_mut(|style| {
+        style.spacing.item_spacing = egui::vec2(8.0, 8.0);
+        style.spacing.button_padding = egui::vec2(12.0, 6.0);
+        style.spacing.interact_size = egui::vec2(72.0, 30.0);
+        style.spacing.window_margin = egui::Margin::same(12);
+    });
 }
 
 #[derive(Debug)]
@@ -513,7 +544,7 @@ impl eframe::App for MyApp {
                     ui.add_space(20.0);
                     ui.spinner();
                     ui.add_space(20.0);
-                    ui.label(&self.init_status);
+                    ui.add(egui::Label::new(&self.init_status).wrap());
                     ui.add_space(10.0);
                     ui.add(egui::ProgressBar::new(self.init_progress).animate(true));
                 });
@@ -528,7 +559,7 @@ impl eframe::App for MyApp {
                     ui.add_space(50.0);
                     ui.heading(rust_i18n::t!("main.title"));
                     ui.add_space(50.0);
-                    ui.label(rust_i18n::t!("main.select_folder_msg"));
+                    ui.add(egui::Label::new(rust_i18n::t!("main.select_folder_msg")).wrap());
                     ui.add_space(20.0);
                     if ui.button(rust_i18n::t!("main.select_folder_btn")).clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_folder() {
@@ -550,7 +581,7 @@ impl eframe::App for MyApp {
             ui.add_space(5.0);
 
             // [NEW] 언어 선택
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(rust_i18n::t!("main.language_label"));
                 let current_locale = rust_i18n::locale().to_string();
                 let mut selected_locale = current_locale.clone();
@@ -581,7 +612,7 @@ impl eframe::App for MyApp {
                 }
             });
 
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label("yt-dlp Channel:");
                 let previous_channel = self.ytdlp_channel;
 
@@ -601,11 +632,14 @@ impl eframe::App for MyApp {
             ui.separator();
 
             // 경로 등
-            ui.horizontal(|ui| {
-                ui.label(rust_i18n::t!(
-                    "main.save_path",
-                    path = self.download_dir.display()
-                ));
+            ui.horizontal_wrapped(|ui| {
+                ui.add(
+                    egui::Label::new(rust_i18n::t!(
+                        "main.save_path",
+                        path = self.download_dir.display()
+                    ))
+                    .wrap(),
+                );
                 if ui.button(rust_i18n::t!("main.change_btn")).clicked() {
                     if let Some(path) = rfd::FileDialog::new().pick_folder() {
                         self.download_dir = path.clone();
@@ -619,10 +653,14 @@ impl eframe::App for MyApp {
             // URL 입력
             ui.horizontal(|ui| {
                 ui.label(rust_i18n::t!("main.url_label"));
-                let text_edit = ui.text_edit_singleline(&mut self.url);
                 if self.state.is_input()
                     || matches!(self.state, AppState::Ready | AppState::Finished)
                 {
+                    let edit_width = (ui.available_width() - 96.0).max(120.0);
+                    let text_edit = ui.add_sized(
+                        [edit_width, ui.spacing().interact_size.y],
+                        egui::TextEdit::singleline(&mut self.url),
+                    );
                     if ui.button(rust_i18n::t!("main.analyze_btn")).clicked()
                         || (text_edit.lost_focus()
                             && ctx.input(|i| i.key_pressed(egui::Key::Enter)))
@@ -631,13 +669,21 @@ impl eframe::App for MyApp {
                             self.start_analysis();
                         }
                     }
+                } else {
+                    ui.add_sized(
+                        [
+                            ui.available_width().max(120.0),
+                            ui.spacing().interact_size.y,
+                        ],
+                        egui::TextEdit::singleline(&mut self.url),
+                    );
                 }
             });
 
             ui.add_space(5.0);
 
             // 형식 선택
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(rust_i18n::t!("main.format_label"));
                 let prev_format = self.format.clone();
                 egui::ComboBox::from_id_salt("format_combo")
@@ -744,21 +790,46 @@ impl eframe::App for MyApp {
                         total = self.download_queue.len()
                     ));
                     if self.current_download_idx < self.download_queue.len() {
-                        ui.label(&self.download_queue[self.current_download_idx].title);
+                        ui.add(
+                            egui::Label::new(&self.download_queue[self.current_download_idx].title)
+                                .wrap(),
+                        );
                     }
                     ui.add_space(5.0);
-                    ui.label(&self.progress_text);
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(&self.progress_text).strong()).wrap(),
+                    );
                     ui.add_space(2.0);
-                    ui.add(egui::ProgressBar::new(self.progress as f32).animate(true));
+                    ui.add(
+                        egui::ProgressBar::new(self.progress as f32)
+                            .animate(true)
+                            .desired_height(8.0)
+                            .corner_radius(4),
+                    );
 
                     ui.add_space(5.0);
-                    egui::ScrollArea::vertical()
-                        .max_height(90.0)
-                        .stick_to_bottom(true)
+                    egui::Frame::new()
+                        .fill(egui::Color32::from_rgb(250, 251, 253))
+                        .stroke(egui::Stroke::new(
+                            1.0,
+                            egui::Color32::from_rgb(226, 230, 238),
+                        ))
+                        .corner_radius(6)
+                        .inner_margin(egui::Margin::symmetric(10, 8))
                         .show(ui, |ui| {
-                            for line in self.download_log.iter().rev().take(12).rev() {
-                                ui.label(egui::RichText::new(line).monospace().weak());
-                            }
+                            egui::ScrollArea::vertical()
+                                .max_height(88.0)
+                                .stick_to_bottom(true)
+                                .show(ui, |ui| {
+                                    for line in self.download_log.iter().rev().take(12).rev() {
+                                        ui.add(
+                                            egui::Label::new(
+                                                egui::RichText::new(line).monospace().weak(),
+                                            )
+                                            .wrap(),
+                                        );
+                                    }
+                                });
                         });
 
                     ui.add_space(5.0);
@@ -768,7 +839,7 @@ impl eframe::App for MyApp {
                 }
                 AppState::Finished => {
                     ui.label(rust_i18n::t!("main.all_completed"));
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         if ui.button(rust_i18n::t!("main.open_folder_btn")).clicked() {
                             #[cfg(target_os = "linux")]
                             let _ = std::process::Command::new("xdg-open")
@@ -825,42 +896,77 @@ impl eframe::App for MyApp {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     if info.is_playlist {
                         for (idx, entry) in info.entries.iter_mut().enumerate() {
-                            ui.horizontal(|ui| {
-                                ui.checkbox(&mut entry.selected, "");
+                            egui::Frame::new()
+                                .fill(egui::Color32::from_rgb(255, 255, 255))
+                                .stroke(egui::Stroke::new(
+                                    1.0,
+                                    egui::Color32::from_rgb(230, 233, 240),
+                                ))
+                                .corner_radius(6)
+                                .inner_margin(egui::Margin::symmetric(10, 8))
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.checkbox(&mut entry.selected, "");
 
-                                // 썸네일
-                                if let Some(thumb_url) = &entry.thumbnail {
-                                    Self::add_square_thumbnail(ui, ctx, thumb_url, 50.0);
-                                }
+                                        // 썸네일
+                                        if let Some(thumb_url) = &entry.thumbnail {
+                                            Self::add_square_thumbnail(ui, ctx, thumb_url, 50.0);
+                                        }
 
-                                ui.vertical(|ui| {
-                                    ui.label(format!("{}. {}", idx + 1, entry.title));
-                                    ui.label(egui::RichText::new(entry.format_duration()).weak());
+                                        ui.vertical(|ui| {
+                                            ui.add(
+                                                egui::Label::new(format!(
+                                                    "{}. {}",
+                                                    idx + 1,
+                                                    entry.title
+                                                ))
+                                                .wrap(),
+                                            );
+                                            ui.label(
+                                                egui::RichText::new(entry.format_duration()).weak(),
+                                            );
+                                        });
+                                    });
                                 });
-                            });
-                            ui.separator();
+                            ui.add_space(6.0);
                         }
                     } else {
                         // 단일 영상도 동일한 리스트 형태로 표시
                         if let Some(entry) = info.entries.first_mut() {
-                            ui.horizontal(|ui| {
-                                // 단일 영상은 체크박스 굳이 필요 없지만 일관성 유지 or 숨김
-                                // ui.checkbox(&mut entry.selected, "");
+                            egui::Frame::new()
+                                .fill(egui::Color32::from_rgb(255, 255, 255))
+                                .stroke(egui::Stroke::new(
+                                    1.0,
+                                    egui::Color32::from_rgb(230, 233, 240),
+                                ))
+                                .corner_radius(6)
+                                .inner_margin(egui::Margin::symmetric(12, 10))
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        // 단일 영상은 체크박스 굳이 필요 없지만 일관성 유지 or 숨김
+                                        // ui.checkbox(&mut entry.selected, "");
 
-                                if let Some(thumb_url) = &entry.thumbnail {
-                                    Self::add_square_thumbnail(ui, ctx, thumb_url, 100.0);
-                                }
-                                ui.vertical(|ui| {
-                                    ui.label(rust_i18n::t!(
-                                        "main.video_title",
-                                        title = entry.title
-                                    ));
-                                    ui.label(rust_i18n::t!(
-                                        "main.video_duration",
-                                        duration = entry.format_duration()
-                                    ));
+                                        if let Some(thumb_url) = &entry.thumbnail {
+                                            Self::add_square_thumbnail(ui, ctx, thumb_url, 100.0);
+                                        }
+                                        ui.vertical(|ui| {
+                                            ui.add(
+                                                egui::Label::new(rust_i18n::t!(
+                                                    "main.video_title",
+                                                    title = entry.title
+                                                ))
+                                                .wrap(),
+                                            );
+                                            ui.add(
+                                                egui::Label::new(rust_i18n::t!(
+                                                    "main.video_duration",
+                                                    duration = entry.format_duration()
+                                                ))
+                                                .wrap(),
+                                            );
+                                        });
+                                    });
                                 });
-                            });
                         }
                     }
                 });
@@ -869,7 +975,7 @@ impl eframe::App for MyApp {
                 if !matches!(self.state, AppState::Analyzing) {
                     ui.vertical_centered(|ui| {
                         ui.add_space(50.0);
-                        ui.label(rust_i18n::t!("main.input_url_hint"));
+                        ui.add(egui::Label::new(rust_i18n::t!("main.input_url_hint")).wrap());
                     });
                 }
             }

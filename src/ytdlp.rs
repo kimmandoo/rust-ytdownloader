@@ -1,9 +1,40 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub type YtDlpResult<T> = Result<T, String>;
 
 pub const YTDLP_SOCKET_TIMEOUT_SECS: &str = "30";
+
+pub fn bundled_deno_path() -> PathBuf {
+    let app_dir = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("rust-yt");
+
+    #[cfg(target_os = "windows")]
+    {
+        app_dir.join("deno.exe")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        app_dir.join("deno")
+    }
+}
+
+pub fn js_runtime_args() -> Vec<String> {
+    let deno_path = bundled_deno_path();
+    if deno_path.exists() {
+        js_runtime_args_for_deno_path(&deno_path)
+    } else {
+        Vec::new()
+    }
+}
+
+fn js_runtime_args_for_deno_path(deno_path: &Path) -> Vec<String> {
+    vec![
+        "--js-runtimes".to_string(),
+        format!("deno:{}", deno_path.to_string_lossy()),
+    ]
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum YtDlpUpdateTarget {
@@ -200,5 +231,18 @@ mod tests {
         for channel in YtDlpChannel::ALL {
             assert_eq!(YtDlpChannel::from_str(channel.as_str()), channel);
         }
+    }
+
+    #[test]
+    fn js_runtime_args_pin_bundled_deno_path() {
+        let args = js_runtime_args_for_deno_path(Path::new("C:/tools/deno.exe"));
+
+        assert_eq!(
+            args,
+            vec![
+                "--js-runtimes".to_string(),
+                "deno:C:/tools/deno.exe".to_string()
+            ]
+        );
     }
 }
