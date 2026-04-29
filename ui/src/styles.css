@@ -34,8 +34,13 @@ select {
 }
 
 button {
-  border: 0;
+  border: 1px solid transparent;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
 }
 
 button:disabled {
@@ -243,10 +248,11 @@ input:focus {
 .primary-button,
 .danger-button,
 #analyzeButton {
-  min-height: 36px;
-  border-radius: 9px;
-  padding: 0 12px;
-  font-weight: 780;
+  min-height: 32px;
+  border-radius: 7px;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 720;
   white-space: nowrap;
 }
 
@@ -255,15 +261,22 @@ input:focus {
 .tiny-button {
   color: #172141;
   background: #ffffff;
-  box-shadow: inset 0 0 0 1px #cfd3dc;
+  border-color: #cfd3dc;
+}
+
+.ghost-button:hover,
+.tiny-button:hover,
+.format-chip:hover {
+  border-color: #aeb5c2;
+  background: #f7f8fa;
 }
 
 .format-chip {
   display: grid;
   gap: 1px;
   justify-items: start;
-  min-height: 44px;
-  padding: 6px 9px;
+  min-height: 40px;
+  padding: 6px 8px;
   text-align: left;
 }
 
@@ -274,24 +287,37 @@ input:focus {
 }
 
 .format-chip.selected {
-  color: #ffffff;
-  background: linear-gradient(135deg, #172141, #4f5f8e);
-  box-shadow: none;
+  color: #172141;
+  border-color: #172141;
+  background: #eef1f7;
 }
 
 .format-chip.selected span {
-  color: rgba(255, 255, 255, 0.72);
+  color: #586174;
 }
 
 #analyzeButton,
 .primary-button {
   color: #ffffff;
-  background: linear-gradient(90deg, #172141, #4f5f8e);
+  background: #172141;
+  border-color: #172141;
+}
+
+#analyzeButton:hover,
+.primary-button:hover {
+  background: #22305f;
+  border-color: #22305f;
 }
 
 .danger-button {
   color: #ffffff;
-  background: #c33a32;
+  background: #b42318;
+  border-color: #b42318;
+}
+
+.danger-button:hover {
+  background: #a11f15;
+  border-color: #a11f15;
 }
 
 .channel-picker {
@@ -351,14 +377,19 @@ input:focus {
 }
 
 .queue-panel {
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+  align-items: start;
   min-height: 0;
   overflow: hidden;
 }
 
 .queue-panel.empty {
   display: grid;
-  place-items: center;
-  text-align: center;
+  align-content: start;
+  justify-items: start;
+  text-align: left;
+  padding-top: 16px;
 }
 
 .queue-panel.empty p:not(.eyebrow) {
@@ -393,8 +424,11 @@ input:focus {
 .video-list {
   display: grid;
   align-content: start;
+  align-self: start;
   gap: 8px;
+  width: 100%;
   min-height: 0;
+  max-height: 100%;
   overflow: auto;
   padding-right: 4px;
 }

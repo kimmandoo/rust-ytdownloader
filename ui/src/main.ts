@@ -217,12 +217,21 @@ async function startDownload() {
 async function stopDownload() {
   if (!isTauriRuntime) {
     phase = "ready";
-    downloadMessage = "다운로드가 중지되었습니다.";
+    downloadMessage = "전체 작업이 취소되었습니다.";
     setLog(downloadMessage);
     render();
     return;
   }
-  await invoke("stop_download");
+  downloadMessage = "전체 작업을 취소하는 중입니다.";
+  setLog(downloadMessage);
+  render();
+  try {
+    await invoke("stop_download");
+  } catch (error) {
+    phase = "ready";
+    errorMessage = String(error);
+    render();
+  }
 }
 
 async function openFolder() {
@@ -298,7 +307,7 @@ function render() {
             ${formats
               .map(
                 (format) => `
-                  <button class="format-chip ${settings.format === format.value ? "selected" : ""}" data-format="${format.value}" style="align-items: "center">
+                  <button class="format-chip ${settings.format === format.value ? "selected" : ""}" data-format="${format.value}">
                     <strong>${format.label}</strong>
                     <span>${format.tone}</span>
                   </button>
@@ -420,7 +429,7 @@ function renderProgressPanel(readyToDownload: boolean, selectedCount: number) {
         <div class="actions">
           ${
             phase === "downloading"
-              ? `<button class="danger-button" id="stopButton">중지</button>`
+              ? `<button class="danger-button" id="stopButton">전체 취소</button>`
               : `<button class="primary-button" id="downloadButton" ${!readyToDownload || selectedCount === 0 ? "disabled" : ""}>${selectedCount || 0}개 다운로드</button>`
           }
           <button class="ghost-button" id="openFolder" ${!settings.download_dir ? "disabled" : ""}>열기</button>
@@ -548,7 +557,7 @@ async function boot() {
     }
     if (payload.kind === "stopped") {
       phase = "ready";
-      downloadMessage = "다운로드가 중지되었습니다.";
+      downloadMessage = payload.message || "전체 작업이 취소되었습니다.";
       setLog(downloadMessage);
     }
     if (payload.kind === "all_completed") {

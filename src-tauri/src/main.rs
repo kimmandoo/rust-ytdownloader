@@ -9,13 +9,17 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::channel;
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::thread;
 use tauri::{AppHandle, Emitter, State};
 
 #[derive(Default)]
 struct RuntimeState {
-    stop_tx: Mutex<Option<std::sync::mpsc::Sender<()>>>,
+    stop_tx: Arc<Mutex<Option<std::sync::mpsc::Sender<()>>>>,
+    cancel_requested: Arc<AtomicBool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -154,11 +158,9 @@ fn start_download(
         return Err("저장 폴더가 존재하지 않습니다.".to_string());
     }
 
-    let (stop_tx, stop_rx) = channel::<()>();
-    *state
-        .stop_tx
-        .lock()
-        .map_err(|_| "중지 상태를 잠글 수 없습니다.")? = Some(stop_tx);
+    state.cancel_requested.store(false, Ordering::SeqCst);
+    let cancel_requested = state.cancel_requested.clone();
+    let stop_tx_slot = state.stop_tx.clone();
 
     let total = selected_entries.len();
     let first_title = selected_entries
@@ -178,12 +180,26 @@ fn start_download(
     );
 
     thread::spawn(move || {
-        let mut stop_rx = Some(stop_rx);
-
         for (idx, video) in selected_entries.into_iter().enumerate() {
             let current = idx + 1;
+            if cancel_requested.load(Ordering::SeqCst) {
+                let _ = app.emit(
+                    "download-progress",
+                    DownloadEvent {
+                        kind: "stopped",
+                        current,
+                        total,
+                        percent: 0.0,
+                        title: video.title,
+                        message: "전체 작업이 취소되었습니다.".to_string(),
+                    },
+                );
+                clear_stop_sender(&stop_tx_slot);
+                return;
+            }
+
             let (status_tx, status_rx) = channel();
-            let (_, fallback_stop_rx) = channel();
+            let (stop_tx, stop_rx) = channel::<()>();
             let video_title = video.title.clone();
             let config = DownloadConfig {
                 url: video.url.clone(),
@@ -191,7 +207,9 @@ fn start_download(
                 audio_quality: "320K".to_string(),
                 output_dir: output_dir.clone(),
             };
-            let receiver = stop_rx.take().unwrap_or(fallback_stop_rx);
+            if let Ok(mut guard) = stop_tx_slot.lock() {
+                *guard = Some(stop_tx);
+            }
 
             let _ = app.emit(
                 "download-progress",
@@ -206,7 +224,7 @@ fn start_download(
             );
 
             let worker = thread::spawn(move || {
-                download_video(config, video_title, status_tx, receiver);
+                download_video(config, video_title, status_tx, stop_rx);
             });
 
             let mut failed_or_stopped = false;
@@ -222,6 +240,7 @@ fn start_download(
             }
 
             let worker_result = worker.join();
+            clear_stop_sender(&stop_tx_slot);
             if !reached_terminal_status {
                 let message = if worker_result.is_err() {
                     "다운로드 작업이 내부 오류로 중단되었습니다.".to_string()
@@ -245,6 +264,21 @@ fn start_download(
             if failed_or_stopped {
                 return;
             }
+
+            if cancel_requested.load(Ordering::SeqCst) {
+                let _ = app.emit(
+                    "download-progress",
+                    DownloadEvent {
+                        kind: "stopped",
+                        current,
+                        total,
+                        percent: 0.0,
+                        title: video.title,
+                        message: "전체 작업이 취소되었습니다.".to_string(),
+                    },
+                );
+                return;
+            }
         }
 
         let _ = app.emit(
@@ -265,6 +299,7 @@ fn start_download(
 
 #[tauri::command]
 fn stop_download(state: State<RuntimeState>) -> Result<(), String> {
+    state.cancel_requested.store(true, Ordering::SeqCst);
     if let Some(tx) = state
         .stop_tx
         .lock()
@@ -274,6 +309,12 @@ fn stop_download(state: State<RuntimeState>) -> Result<(), String> {
         let _ = tx.send(());
     }
     Ok(())
+}
+
+fn clear_stop_sender(stop_tx_slot: &Arc<Mutex<Option<std::sync::mpsc::Sender<()>>>>) {
+    if let Ok(mut guard) = stop_tx_slot.lock() {
+        *guard = None;
+    }
 }
 
 #[tauri::command]
@@ -387,7 +428,7 @@ fn download_event_from_status(
             total,
             percent: 0.0,
             title: title.to_string(),
-            message: "다운로드가 중지되었습니다.".to_string(),
+            message: "전체 작업이 취소되었습니다.".to_string(),
         },
     }
 }
