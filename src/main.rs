@@ -125,6 +125,7 @@ struct MyApp {
     current_download_idx: usize,
     progress: f64,
     progress_text: String,
+    download_log: Vec<String>,
 
     // 비동기 통신
     tx_ui: Sender<UiMessage>,
@@ -220,6 +221,7 @@ impl Default for MyApp {
             current_download_idx: 0,
             progress: 0.0,
             progress_text: String::new(),
+            download_log: Vec::new(),
             tx_ui: tx,
             rx_ui: rx,
             stop_tx: None,
@@ -264,6 +266,7 @@ impl MyApp {
         }
 
         self.current_download_idx = 0;
+        self.download_log.clear();
         self.state = AppState::Downloading;
         self.download_next();
         Ok(())
@@ -300,6 +303,7 @@ impl MyApp {
         // UI 초기화
         self.progress = 0.0;
         self.progress_text = rust_i18n::t!("main.preparing_video", title = video.title).to_string();
+        self.push_download_log(self.progress_text.clone());
 
         // 중지 채널 생성
         let (stop_tx, stop_rx) = channel();
@@ -371,6 +375,21 @@ impl MyApp {
 
         ui.add(image.fit_to_exact_size(thumbnail_size).corner_radius(5.0));
     }
+
+    fn push_download_log(&mut self, message: impl Into<String>) {
+        const MAX_DOWNLOAD_LOG_LINES: usize = 80;
+
+        let message = message.into();
+        if message.trim().is_empty() {
+            return;
+        }
+
+        self.download_log.push(message);
+        if self.download_log.len() > MAX_DOWNLOAD_LOG_LINES {
+            let overflow = self.download_log.len() - MAX_DOWNLOAD_LOG_LINES;
+            self.download_log.drain(0..overflow);
+        }
+    }
 }
 
 impl eframe::App for MyApp {
@@ -423,17 +442,25 @@ impl eframe::App for MyApp {
                 },
                 UiMessage::DownloadProgress(status) => match status {
                     DownloadStatus::Starting(msg) => {
+                        self.push_download_log(msg.clone());
                         self.progress_text = msg;
                         self.progress = 0.0;
                     }
                     DownloadStatus::Progress(p, speed) => {
                         self.progress = p / 100.0;
                         self.progress_text = format!("{:.1}% ({})", p, speed);
+                        self.push_download_log(self.progress_text.clone());
+                    }
+                    DownloadStatus::Message(msg) => {
+                        self.push_download_log(msg.clone());
+                        self.progress_text = msg;
                     }
                     DownloadStatus::Converting => {
                         self.progress_text = rust_i18n::t!("main.converting").to_string();
+                        self.push_download_log(self.progress_text.clone());
                     }
-                    DownloadStatus::Completed(_) => {
+                    DownloadStatus::Completed(title) => {
+                        self.push_download_log(format!("완료: {}", title));
                         self.current_download_idx += 1;
                         self.download_next();
                     }
@@ -444,15 +471,18 @@ impl eframe::App for MyApp {
                             self.progress_text = rust_i18n::t!("main.download_stopped").to_string();
                         } else {
                             self.progress_text = format!("오류: {}", e);
+                            self.push_download_log(self.progress_text.clone());
                             self.error_msg =
                                 Some(rust_i18n::t!("main.download_paused", error = e).to_string());
                             self.state = AppState::Ready;
                         }
+                        self.push_download_log(self.progress_text.clone());
                         self.stop_tx = None;
                     }
                     DownloadStatus::Stopped => {
                         self.state = AppState::Ready;
                         self.progress_text = rust_i18n::t!("main.download_stopped").to_string();
+                        self.push_download_log(self.progress_text.clone());
                         self.stop_tx = None;
                     }
                 },
@@ -720,6 +750,16 @@ impl eframe::App for MyApp {
                     ui.label(&self.progress_text);
                     ui.add_space(2.0);
                     ui.add(egui::ProgressBar::new(self.progress as f32).animate(true));
+
+                    ui.add_space(5.0);
+                    egui::ScrollArea::vertical()
+                        .max_height(90.0)
+                        .stick_to_bottom(true)
+                        .show(ui, |ui| {
+                            for line in self.download_log.iter().rev().take(12).rev() {
+                                ui.label(egui::RichText::new(line).monospace().weak());
+                            }
+                        });
 
                     ui.add_space(5.0);
                     if ui.button(rust_i18n::t!("main.stop_download_btn")).clicked() {
