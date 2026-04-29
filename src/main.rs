@@ -12,8 +12,8 @@ use std::thread;
 rust_i18n::i18n!("locales");
 
 fn main() -> eframe::Result<()> {
-    // 폰트 설정 (임베디드 폰트)
-    // 윈도우/리눅스 모두에서 한글 깨짐을 방지하기 위해 폰트를 바이너리에 포함
+    // 임베디드 폰트 설정
+    // Windows, macOS, Linux에서 한글이 깨지지 않도록 폰트를 바이너리에 포함합니다.
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -30,7 +30,7 @@ fn main() -> eframe::Result<()> {
         Box::new(|cc| {
             setup_custom_fonts(&cc.egui_ctx);
             setup_app_style(&cc.egui_ctx);
-            egui_extras::install_image_loaders(&cc.egui_ctx); // [NEW] 이미지 로더 설치
+            egui_extras::install_image_loaders(&cc.egui_ctx); // 이미지 로더 설치
             Ok(Box::new(MyApp::default()))
         }),
     )
@@ -104,10 +104,10 @@ fn setup_custom_fonts(ctx: &egui::Context) {
 
 fn setup_app_style(ctx: &egui::Context) {
     let mut visuals = egui::Visuals::light();
-    visuals.panel_fill = egui::Color32::from_rgb(246, 247, 249);
+    visuals.panel_fill = egui::Color32::from_rgb(242, 244, 248);
     visuals.window_fill = egui::Color32::from_rgb(255, 255, 255);
-    visuals.faint_bg_color = egui::Color32::from_rgb(239, 241, 245);
-    visuals.extreme_bg_color = egui::Color32::from_rgb(232, 235, 240);
+    visuals.faint_bg_color = egui::Color32::from_rgb(234, 237, 243);
+    visuals.extreme_bg_color = egui::Color32::from_rgb(223, 227, 235);
     visuals.selection.bg_fill = egui::Color32::from_rgb(0, 122, 255);
     visuals.selection.stroke.color = egui::Color32::WHITE;
     visuals.hyperlink_color = egui::Color32::from_rgb(0, 102, 204);
@@ -124,17 +124,17 @@ fn setup_app_style(ctx: &egui::Context) {
     ctx.set_visuals(visuals);
 
     ctx.all_styles_mut(|style| {
-        style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-        style.spacing.button_padding = egui::vec2(12.0, 6.0);
+        style.spacing.item_spacing = egui::vec2(8.0, 6.0);
+        style.spacing.button_padding = egui::vec2(12.0, 5.0);
         style.spacing.interact_size = egui::vec2(72.0, 30.0);
-        style.spacing.window_margin = egui::Margin::same(12);
+        style.spacing.window_margin = egui::Margin::same(10);
     });
 }
 
 #[derive(Debug)]
 enum AppState {
-    Initializing, // [NEW] 초기화 (다운로드 등)
-    SetPath,      // [NEW] 초기 경로 설정
+    Initializing, // 초기화 및 의존성 준비
+    SetPath,      // 초기 다운로드 경로 설정
     Input,
     Analyzing,
     Ready,
@@ -151,7 +151,7 @@ struct MyApp {
     playlist_info: Option<PlaylistInfo>,
     error_msg: Option<String>,
 
-    // 다운로드 관련
+    // 다운로드 상태
     download_queue: Vec<VideoEntry>,
     current_download_idx: usize,
     progress: f64,
@@ -163,11 +163,11 @@ struct MyApp {
     rx_ui: Receiver<UiMessage>,
     stop_tx: Option<Sender<()>>,
 
-    // 초기화 상태 표시용
+    // 초기화 상태 표시
     init_status: String,
     init_progress: f32,
 
-    // 설정 저장 시 경로 설정 건너뛰기
+    // 설정 저장 시 경로 설정 단계 건너뛰기
     skip_set_path: bool,
 }
 
@@ -203,14 +203,14 @@ impl Default for MyApp {
             AppState::Initializing
         };
 
-        // [초기화 스레드 시작]
+        // 초기화 스레드 시작
         let tx_clone = tx.clone();
         let has_saved_path = saved_config.download_dir.is_some();
         let init_ytdlp_channel = initial_ytdlp_channel;
         thread::spawn(move || {
             let (init_tx, init_rx) = channel();
 
-            // 실제 초기화 작업 수행 (별도 스레드)
+            // 실제 초기화 작업 수행
             thread::spawn(move || {
                 rust_yt::initializer::init_dependencies(init_tx, init_ytdlp_channel);
             });
@@ -220,7 +220,7 @@ impl Default for MyApp {
                 // 저장된 경로가 있으면 Completed 시 Input으로 직행
                 let modified_status = if has_saved_path {
                     if let rust_yt::initializer::InitStatus::Completed = &status {
-                        // Completed 상태는 그대로 전달 (이미 initial_state가 Input임)
+                        // Completed 상태는 그대로 전달
                     }
                     status
                 } else {
@@ -307,8 +307,8 @@ impl MyApp {
         if let Some(tx) = &self.stop_tx {
             let _ = tx.send(());
         }
-        // stop_tx는 즉시 해제하지 않고, 스레드가 종료되어 Failed/Stopped 메시지를 보낼 때까지 기다리거나
-        // UI 반응성을 위해 즉시 상태 변경
+        // 중지 신호를 보낸 뒤 다운로드 스레드가 상태 메시지를 보낼 때까지 기다립니다.
+        // UI 반응성을 위해 화면 상태는 즉시 갱신합니다.
         self.progress_text = rust_i18n::t!("main.download_stopped").to_string();
     }
 
@@ -328,7 +328,7 @@ impl MyApp {
             url: video.url.clone(),
             format: self.format.clone(),
             audio_quality: "320K".to_string(),
-            output_dir: self.download_dir.clone(), // [NEW] 선택된 경로 사용
+            output_dir: self.download_dir.clone(), // 선택한 저장 경로 사용
         };
 
         // UI 초기화
@@ -343,7 +343,7 @@ impl MyApp {
         thread::spawn(move || {
             let (tx_internal, rx_internal) = channel();
 
-            // 별도 스레드에서 다운로드 실행 (tx_internal 소유권 이동)
+            // 별도 스레드에서 다운로드 실행
             let config_clone = config.clone();
             let title_clone = video.title.clone();
             let tx_internal_clone = tx_internal.clone();
@@ -352,7 +352,7 @@ impl MyApp {
                 download_video(config_clone, title_clone, tx_internal_clone, stop_rx);
             });
 
-            // 중계 루프
+            // 진행 상태 중계
             while let Ok(status) = rx_internal.recv() {
                 match tx.send(UiMessage::DownloadProgress(status)) {
                     Ok(_) => {}
@@ -427,10 +427,16 @@ impl MyApp {
             .fill(egui::Color32::from_rgb(255, 255, 255))
             .stroke(egui::Stroke::new(
                 1.0,
-                egui::Color32::from_rgb(226, 230, 238),
+                egui::Color32::from_rgb(198, 205, 218),
             ))
             .corner_radius(8)
-            .inner_margin(egui::Margin::symmetric(14, 12))
+            .shadow(egui::Shadow {
+                offset: [0, 1],
+                blur: 8,
+                spread: 0,
+                color: egui::Color32::from_black_alpha(18),
+            })
+            .inner_margin(egui::Margin::symmetric(12, 10))
     }
 
     fn render_app_header(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -495,13 +501,23 @@ impl MyApp {
                 }
             });
 
-            ui.add_space(10.0);
-            ui.horizontal(|ui| {
+            ui.add_space(8.0);
+            let compact_url_row = ui.available_width() < 420.0;
+            if compact_url_row {
                 ui.label(rust_i18n::t!("main.url_label"));
+            }
+            ui.horizontal_wrapped(|ui| {
+                if !compact_url_row {
+                    ui.label(rust_i18n::t!("main.url_label"));
+                }
                 if self.state.is_input()
                     || matches!(self.state, AppState::Ready | AppState::Finished)
                 {
-                    let edit_width = (ui.available_width() - 104.0).max(180.0);
+                    let edit_width = if compact_url_row {
+                        ui.available_width().max(220.0)
+                    } else {
+                        (ui.available_width() - 96.0).max(220.0)
+                    };
                     let text_edit = ui.add_sized(
                         [edit_width, ui.spacing().interact_size.y],
                         egui::TextEdit::singleline(&mut self.url),
@@ -525,7 +541,7 @@ impl MyApp {
                 }
             });
 
-            ui.add_space(10.0);
+            ui.add_space(8.0);
             ui.horizontal_wrapped(|ui| {
                 ui.label(rust_i18n::t!("main.format_label"));
                 let prev_format = self.format.clone();
@@ -609,7 +625,7 @@ impl MyApp {
                             }
                         }
                     });
-                    ui.add_space(10.0);
+                    ui.add_space(8.0);
                 }
 
                 if info.is_playlist {
@@ -660,9 +676,9 @@ impl MyApp {
                 }
             } else if !matches!(self.state, AppState::Analyzing) {
                 ui.vertical_centered(|ui| {
-                    ui.add_space(40.0);
+                    ui.add_space(14.0);
                     ui.add(egui::Label::new(rust_i18n::t!("main.input_url_hint")).wrap());
-                    ui.add_space(40.0);
+                    ui.add_space(14.0);
                 });
             }
         });
@@ -673,10 +689,10 @@ impl MyApp {
             .fill(egui::Color32::from_rgb(255, 255, 255))
             .stroke(egui::Stroke::new(
                 1.0,
-                egui::Color32::from_rgb(230, 233, 240),
+                egui::Color32::from_rgb(207, 214, 226),
             ))
             .corner_radius(6)
-            .inner_margin(egui::Margin::symmetric(10, 8))
+            .inner_margin(egui::Margin::symmetric(10, 7))
     }
 
     fn render_status_area(&mut self, ui: &mut egui::Ui) {
@@ -810,7 +826,7 @@ impl eframe::App for MyApp {
                         }
                         rust_yt::initializer::InitStatus::Extracting(msg) => {
                             self.init_status = msg;
-                            self.init_progress = 1.0; // 인디터미네이트로 쓸 수도 있음
+                            self.init_progress = 1.0; // 인디케이터를 완료 상태로 표시
                         }
                         rust_yt::initializer::InitStatus::Completed => {
                             if self.skip_set_path {
@@ -821,7 +837,7 @@ impl eframe::App for MyApp {
                         }
                         rust_yt::initializer::InitStatus::Failed(e) => {
                             self.error_msg = Some(format!("초기화 실패: {}", e));
-                            // 실패해도 일단 진행? 아니면 재시도? 일단 진행시켜서 수동 설정 유도하거나 에러 표시
+                            // 초기화가 실패해도 오류를 표시하고 입력 화면으로 진행합니다.
                             self.state = AppState::SetPath;
                         }
                     }
@@ -866,7 +882,7 @@ impl eframe::App for MyApp {
                             self.state = AppState::Ready;
                             self.progress_text = rust_i18n::t!("main.download_stopped").to_string();
                         } else {
-                            self.progress_text = format!("오류: {}", e);
+                            self.progress_text = format!("?ㅻ쪟: {}", e);
                             self.push_download_log(self.progress_text.clone());
                             self.error_msg =
                                 Some(rust_i18n::t!("main.download_paused", error = e).to_string());
@@ -885,76 +901,74 @@ impl eframe::App for MyApp {
             }
         }
 
-        // -1. 초기화 화면
+        // 초기화 화면
         if matches!(self.state, AppState::Initializing) {
-            // 렌더링 루프 초기에 한 번만 실행되도록 플래그를 쓰거나,
-            // 생성자에서 스레드를 띄우는 게 낫지만 eframe 특성상 여기서 띄우기도 가능.
-            // 하지만 매 프레임 실행되면 안됨.
-            // MyApp 구조체에 `init_started` 필드를 두거나,
-            // tx/rx가 있으므로 생성자에서 그냥 띄우는게 낫다.
-            // -> 생성자에서는 self.tx_ui를 클론해서 넘겨주기가 까다로울 수 있음 (Channel은 되지만)
-            // 여기서는 간단히 "한 번만 실행" 로직을 넣기보다,
-            // MyApp::default()가 호출될 때 thread를 띄우는게 정석.
-            // 하지만 MyApp::default는 &self가 아니라서 필드 접근 불가.
-            // setup_custom_fonts 호출하는 closure 안에서
-            // MyApp 생성 후, 거기서 띄우는 방법.
-            // 일단 여기서는 꼼수로... static flag나 Option check?
-            // 아님 그냥 별도 함수 start_init() 만들어서 생성자에서 호출?
-            // -> 생성자에서 호출하자.
+            // 초기화 상태는 생성자에서 시작한 작업 결과를 표시합니다.
+            // 화면은 스레드를 다시 시작하지 않고 수신된 상태만 반영합니다.
 
             egui::CentralPanel::default().show(ctx, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.add_space(100.0);
-                    ui.heading(rust_i18n::t!("initialization.title"));
-                    ui.add_space(20.0);
-                    ui.spinner();
-                    ui.add_space(20.0);
-                    ui.add(egui::Label::new(&self.init_status).wrap());
-                    ui.add_space(10.0);
-                    ui.add(egui::ProgressBar::new(self.init_progress).animate(true));
-                });
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(48.0);
+                            ui.heading(rust_i18n::t!("initialization.title"));
+                            ui.add_space(14.0);
+                            ui.spinner();
+                            ui.add_space(14.0);
+                            ui.add(egui::Label::new(&self.init_status).wrap());
+                            ui.add_space(8.0);
+                            ui.add(egui::ProgressBar::new(self.init_progress).animate(true));
+                        });
+                    });
             });
             return;
         }
 
-        // 0. 초기 경로 설정 화면
+        // 초기 경로 설정 화면
         if matches!(self.state, AppState::SetPath) {
             egui::CentralPanel::default().show(ctx, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.add_space(50.0);
-                    ui.heading(rust_i18n::t!("main.title"));
-                    ui.add_space(50.0);
-                    ui.add(egui::Label::new(rust_i18n::t!("main.select_folder_msg")).wrap());
-                    ui.add_space(20.0);
-                    if ui.button(rust_i18n::t!("main.select_folder_btn")).clicked() {
-                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                            self.download_dir = path.clone();
-                            self.state = AppState::Input;
-                            // 설정 저장
-                            self.save_config();
-                        }
-                    }
-                });
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(36.0);
+                            ui.heading(rust_i18n::t!("main.title"));
+                            ui.add_space(24.0);
+                            ui.add(
+                                egui::Label::new(rust_i18n::t!("main.select_folder_msg")).wrap(),
+                            );
+                            ui.add_space(14.0);
+                            if ui.button(rust_i18n::t!("main.select_folder_btn")).clicked() {
+                                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                    self.download_dir = path.clone();
+                                    self.state = AppState::Input;
+                                    // 설정 저장
+                                    self.save_config();
+                                }
+                            }
+                        });
+                    });
             });
             return;
         }
 
-        // 1. Top Panel (설정 및 입력)
+        // 메인 레이아웃
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     self.render_app_header(ui, ctx);
-                    ui.add_space(12.0);
+                    ui.add_space(8.0);
                     self.render_work_area(ui, ctx);
-                    ui.add_space(12.0);
+                    ui.add_space(8.0);
                     self.render_status_area(ui);
-                    ui.add_space(12.0);
+                    ui.add_space(8.0);
                 });
         });
 
-        // 애니메이션 효과를 위해 지속적 갱신 필요시 (다운로드 중일 때)
+        // 다운로드 중에는 진행률 애니메이션을 위해 지속적으로 갱신합니다.
         if matches!(self.state, AppState::Downloading) {
             ctx.request_repaint();
         }
@@ -968,6 +982,6 @@ impl AppState {
     }
 }
 
-// download_next에서 스레드 생성시 channel 중계 로직 필요
-// downloader::download_video의 인자가 Sender<DownloadStatus> 라서
-// UiMessage로 감싸주는 래퍼가 필요.
+// download_next에서 생성한 스레드와 UI 메시지를 중계합니다.
+// downloader::download_video는 Sender<DownloadStatus>를 사용합니다.
+// UiMessage로 감싸는 어댑터가 필요합니다.
