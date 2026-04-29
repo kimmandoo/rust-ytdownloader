@@ -67,8 +67,8 @@ jobs:
           | Platform | File |
           |----------|------|
           | Windows x86_64 | `rust-ytdownloader-windows-x86_64.exe` |
-          | macOS Intel | `rust-ytdownloader-macos-x86_64` |
-          | macOS Apple Silicon | `rust-ytdownloader-macos-aarch64` |
+          | macOS Intel | `rust-ytdownloader-macos-x86_64.app.zip` |
+          | macOS Apple Silicon | `rust-ytdownloader-macos-aarch64.app.zip` |
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -87,16 +87,19 @@ jobs:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: rust-ytdownloader-tauri.exe
+            build_args: --target x86_64-pc-windows-msvc --no-bundle
+            artifact_glob: src-tauri/target/x86_64-pc-windows-msvc/release/rust-ytdownloader-tauri.exe
             asset_name: rust-ytdownloader-windows-x86_64.exe
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: rust-ytdownloader-tauri
-            asset_name: rust-ytdownloader-macos-x86_64
+            build_args: --target x86_64-apple-darwin --bundles app
+            artifact_glob: src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app
+            asset_name: rust-ytdownloader-macos-x86_64.app.zip
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: rust-ytdownloader-tauri
-            asset_name: rust-ytdownloader-macos-aarch64
+            build_args: --target aarch64-apple-darwin --bundles app
+            artifact_glob: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+            asset_name: rust-ytdownloader-macos-aarch64.app.zip
 
     steps:
       - name: Checkout repository
@@ -123,7 +126,7 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build release binary
+      - name: Build release bundle
         shell: bash
         run: |
           retry() {
@@ -138,14 +141,34 @@ jobs:
             done
           }
 
-          retry npm run tauri build -- --target "${{ matrix.target }}"
+          retry npm run tauri build -- ${{ matrix.build_args }}
 
-      - name: Upload binary to draft release
+      - name: Prepare release asset
+        shell: bash
+        env:
+          ASSET_GLOB: ${{ matrix.artifact_glob }}
+          ASSET_NAME: ${{ matrix.asset_name }}
+        run: |
+          shopt -s nullglob
+          matches=($ASSET_GLOB)
+          if [ "${#matches[@]}" -ne 1 ]; then
+            printf 'Expected exactly one artifact for %s, found %s\n' "$ASSET_GLOB" "${#matches[@]}"
+            printf '%s\n' "${matches[@]}"
+            exit 1
+          fi
+
+          mkdir -p release-assets
+          if [[ "$ASSET_NAME" == *.zip ]]; then
+            ditto -c -k --sequesterRsrc --keepParent "${matches[0]}" "release-assets/$ASSET_NAME"
+          else
+            cp "${matches[0]}" "release-assets/$ASSET_NAME"
+          fi
+
+      - name: Upload release asset to draft release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare-release.outputs.tag }}
-          ASSET_PATH: src-tauri/target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
           ASSET_NAME: ${{ matrix.asset_name }}
         run: |
           retry() {
@@ -160,8 +183,8 @@ jobs:
             done
           }
 
-          test -f "$ASSET_PATH"
-          retry gh release upload "$TAG" "$ASSET_PATH#$ASSET_NAME" --clobber
+          test -f "release-assets/$ASSET_NAME"
+          retry gh release upload "$TAG" "release-assets/$ASSET_NAME" --clobber
 
   publish-release:
     name: Publish release
