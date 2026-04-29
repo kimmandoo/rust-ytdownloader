@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use rust_yt::config::AppConfig;
 use rust_yt::downloader::{download_video, DownloadConfig, DownloadFormat, DownloadStatus};
 use rust_yt::initializer::{init_dependencies, InitStatus};
@@ -158,8 +160,24 @@ fn start_download(
         .lock()
         .map_err(|_| "중지 상태를 잠글 수 없습니다.")? = Some(stop_tx);
 
+    let total = selected_entries.len();
+    let first_title = selected_entries
+        .first()
+        .map(|entry| entry.title.clone())
+        .unwrap_or_default();
+    let _ = app.emit(
+        "download-progress",
+        DownloadEvent {
+            kind: "starting",
+            current: 1,
+            total,
+            percent: 0.0,
+            title: first_title,
+            message: "다운로드 요청을 받았습니다.".to_string(),
+        },
+    );
+
     thread::spawn(move || {
-        let total = selected_entries.len();
         let mut stop_rx = Some(stop_rx);
 
         for (idx, video) in selected_entries.into_iter().enumerate() {
@@ -175,18 +193,53 @@ fn start_download(
             };
             let receiver = stop_rx.take().unwrap_or(fallback_stop_rx);
 
-            thread::spawn(move || {
+            let _ = app.emit(
+                "download-progress",
+                DownloadEvent {
+                    kind: "message",
+                    current,
+                    total,
+                    percent: 0.0,
+                    title: video.title.clone(),
+                    message: "yt-dlp 실행을 준비하고 있습니다.".to_string(),
+                },
+            );
+
+            let worker = thread::spawn(move || {
                 download_video(config, video_title, status_tx, receiver);
             });
 
             let mut failed_or_stopped = false;
+            let mut reached_terminal_status = false;
             while let Ok(status) = status_rx.recv() {
                 let event = download_event_from_status(status, current, total, &video.title);
                 failed_or_stopped = matches!(event.kind, "failed" | "stopped");
                 let _ = app.emit("download-progress", event.clone());
                 if matches!(event.kind, "completed" | "failed" | "stopped") {
+                    reached_terminal_status = true;
                     break;
                 }
+            }
+
+            let worker_result = worker.join();
+            if !reached_terminal_status {
+                let message = if worker_result.is_err() {
+                    "다운로드 작업이 내부 오류로 중단되었습니다.".to_string()
+                } else {
+                    "다운로드 작업이 상태 메시지 없이 종료되었습니다.".to_string()
+                };
+                let _ = app.emit(
+                    "download-progress",
+                    DownloadEvent {
+                        kind: "failed",
+                        current,
+                        total,
+                        percent: 0.0,
+                        title: video.title,
+                        message,
+                    },
+                );
+                return;
             }
 
             if failed_or_stopped {

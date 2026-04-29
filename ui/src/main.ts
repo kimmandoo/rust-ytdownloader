@@ -84,6 +84,7 @@ let downloadTitle = "";
 let downloadPercent = 0;
 let downloadCurrent = 0;
 let downloadTotal = 0;
+let downloadEventCount = 0;
 let logs: string[] = [];
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
@@ -184,6 +185,7 @@ async function startDownload() {
   downloadPercent = 0;
   downloadCurrent = 1;
   downloadTotal = entries.length;
+  downloadEventCount = 0;
   downloadMessage = "다운로드를 준비하고 있습니다.";
   render();
 
@@ -198,6 +200,13 @@ async function startDownload() {
       format: settings.format,
       outputDir: settings.download_dir,
     });
+    window.setTimeout(() => {
+      if (phase === "downloading" && downloadEventCount === 0) {
+        downloadMessage = "다운로드 요청을 보냈지만 앱 응답이 아직 도착하지 않았습니다.";
+        setLog(downloadMessage);
+        render();
+      }
+    }, 2500);
   } catch (error) {
     phase = "ready";
     errorMessage = String(error);
@@ -521,13 +530,16 @@ async function boot() {
 
   await listen<DownloadEvent>("download-progress", (event) => {
     const payload = event.payload;
+    downloadEventCount += 1;
     downloadCurrent = payload.current;
     downloadTotal = payload.total;
     downloadPercent = payload.percent;
     downloadTitle = payload.title;
     downloadMessage = payload.message;
 
-    if (payload.kind === "message") setLog(payload.message);
+    if (payload.kind === "starting" || payload.kind === "message" || payload.kind === "converting") {
+      setLog(payload.message);
+    }
     if (payload.kind === "completed") setLog(`완료: ${payload.title}`);
     if (payload.kind === "failed") {
       phase = "ready";

@@ -237,21 +237,8 @@ pub fn download_video(
                     detected_audio_output = parse_extract_audio_output_line(&line);
                 }
 
-                if line.contains("[download]") && line.contains("%") {
-                    if let Some(percent_str) = line.split_whitespace().find(|s| s.ends_with('%')) {
-                        if let Ok(percent) = percent_str.trim_end_matches('%').parse::<f64>() {
-                            let speed = line
-                                .split_whitespace()
-                                .find(|s| s.ends_with("/s"))
-                                .unwrap_or("")
-                                .to_string();
-                            let _ = tx.send(DownloadStatus::Progress(percent, speed));
-                        } else {
-                            send_ytdlp_message(&tx, &line);
-                        }
-                    } else {
-                        send_ytdlp_message(&tx, &line);
-                    }
+                if let Some((percent, speed)) = parse_ytdlp_progress(&line) {
+                    let _ = tx.send(DownloadStatus::Progress(percent, speed));
                 } else {
                     send_ytdlp_message(&tx, &line);
                 }
@@ -343,8 +330,28 @@ pub fn download_video(
 fn send_ytdlp_message(tx: &Sender<DownloadStatus>, line: &str) {
     let line = line.trim();
     if !line.is_empty() {
-        let _ = tx.send(DownloadStatus::Message(line.to_string()));
+        if let Some((percent, speed)) = parse_ytdlp_progress(line) {
+            let _ = tx.send(DownloadStatus::Progress(percent, speed));
+        } else {
+            let _ = tx.send(DownloadStatus::Message(line.to_string()));
+        }
     }
+}
+
+fn parse_ytdlp_progress(line: &str) -> Option<(f64, String)> {
+    if !line.contains("[download]") || !line.contains('%') {
+        return None;
+    }
+
+    let percent_str = line.split_whitespace().find(|part| part.ends_with('%'))?;
+    let percent = percent_str.trim_end_matches('%').parse::<f64>().ok()?;
+    let speed = line
+        .split_whitespace()
+        .find(|part| part.ends_with("/s"))
+        .unwrap_or("")
+        .to_string();
+
+    Some((percent, speed))
 }
 
 fn is_audio_format(format: &DownloadFormat) -> bool {
@@ -576,4 +583,27 @@ fn sanitize_filename(filename: &str) -> String {
         .collect::<String>()
         .trim()
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_ytdlp_progress;
+
+    #[test]
+    fn parses_ytdlp_progress_line() {
+        let line = "[download]  42.7% of 10.00MiB at 1.25MiB/s ETA 00:04";
+
+        assert_eq!(
+            parse_ytdlp_progress(line),
+            Some((42.7, "1.25MiB/s".to_string()))
+        );
+    }
+
+    #[test]
+    fn ignores_non_progress_download_lines() {
+        assert_eq!(
+            parse_ytdlp_progress("[download] Destination: video.webm"),
+            None
+        );
+    }
 }
