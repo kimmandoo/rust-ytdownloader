@@ -1,6 +1,6 @@
 # YouTube Downloader
 
-A cross-platform YouTube downloader with a Rust core and a Tauri desktop UI.
+A YouTube downloader for Windows and macOS with a Rust core and a Tauri desktop UI.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Build Status](https://github.com/kimmandoo/rust-ytdownloader/actions/workflows/release.yml/badge.svg)
@@ -21,7 +21,7 @@ A cross-platform YouTube downloader with a Rust core and a Tauri desktop UI.
 - Rust stable
 - Node.js and npm
 - Windows: Visual Studio Build Tools with MSVC and Windows SDK
-- Linux: Tauri system dependencies such as WebKitGTK, OpenSSL, and build tools
+- macOS: Xcode Command Line Tools
 
 ### Run the Tauri App
 

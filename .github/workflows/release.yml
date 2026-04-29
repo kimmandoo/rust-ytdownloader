@@ -66,7 +66,6 @@ jobs:
 
           | Platform | File |
           |----------|------|
-          | Linux x86_64 | `rust-ytdownloader-linux-x86_64` |
           | Windows x86_64 | `rust-ytdownloader-windows-x86_64.exe` |
           | macOS Intel | `rust-ytdownloader-macos-x86_64` |
           | macOS Apple Silicon | `rust-ytdownloader-macos-aarch64` |
@@ -86,10 +85,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact_name: rust-ytdownloader-tauri
-            asset_name: rust-ytdownloader-linux-x86_64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: rust-ytdownloader-tauri.exe
@@ -106,25 +101,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/azure-cli.sources
-          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            curl \
-            file \
-            pkg-config \
-            wget \
-            libayatana-appindicator3-dev \
-            libssl-dev \
-            librsvg2-dev \
-            libsoup-3.0-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'

@@ -13,7 +13,7 @@ rust_i18n::i18n!("locales");
 
 fn main() -> eframe::Result<()> {
     // 임베디드 폰트 설정
-    // Windows, macOS, Linux에서 한글이 깨지지 않도록 폰트를 바이너리에 포함합니다.
+    // Windows와 macOS에서 한글이 깨지지 않도록 폰트를 바이너리에 포함합니다.
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -777,10 +777,6 @@ impl MyApp {
                     ui.label(rust_i18n::t!("main.all_completed"));
                     ui.horizontal_wrapped(|ui| {
                         if ui.button(rust_i18n::t!("main.open_folder_btn")).clicked() {
-                            #[cfg(target_os = "linux")]
-                            let _ = std::process::Command::new("xdg-open")
-                                .arg(&self.download_dir)
-                                .spawn();
                             #[cfg(target_os = "windows")]
                             let _ = std::process::Command::new("explorer")
                                 .arg(&self.download_dir)
