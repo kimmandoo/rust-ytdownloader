@@ -13,29 +13,90 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  prepare-release:
+    name: Prepare draft release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release tag
+        id: tag
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          TAG="v${{ steps.get_version.outputs.version }}-${{ github.run_number }}-${SHORT_SHA}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          retry() {
+            delay=3
+            for attempt in 1 2 3 4 5; do
+              "$@" && return 0
+              if [ "$attempt" = 5 ]; then
+                return 1
+              fi
+              sleep "$delay"
+              delay=$((delay * 2))
+            done
+          }
+
+          cat > release-notes.md <<'EOF'
+          ## Auto Release
+
+          **Commit:** `${{ github.sha }}`
+          **Message:** ${{ github.event.head_commit.message }}
+          **Author:** ${{ github.event.head_commit.author.name }}
+          **Date:** ${{ github.event.head_commit.timestamp }}
+
+          ### Downloads
+
+          | Platform | File |
+          |----------|------|
+          | Linux x86_64 | `rust-ytdownloader-linux-x86_64` |
+          | Windows x86_64 | `rust-ytdownloader-windows-x86_64.exe` |
+          | macOS Intel | `rust-ytdownloader-macos-x86_64` |
+          | macOS Apple Silicon | `rust-ytdownloader-macos-aarch64` |
+          EOF
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            retry gh release edit "$TAG" --draft=true --prerelease=false --notes-file release-notes.md
+          else
+            retry gh release create "$TAG" --draft --title "Release $TAG" --notes-file release-notes.md
+          fi
+
   build:
     name: Build ${{ matrix.target }}
+    needs: prepare-release
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: rust-ytdownloader
             asset_name: rust-ytdownloader-linux-x86_64
-          # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: rust-ytdownloader.exe
             asset_name: rust-ytdownloader-windows-x86_64.exe
-          # macOS Intel
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: rust-ytdownloader
             asset_name: rust-ytdownloader-macos-x86_64
-          # macOS Apple Silicon
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: rust-ytdownloader
@@ -45,7 +106,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ========== Linux Dependencies ==========
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -63,20 +123,17 @@ jobs:
             libxkbcommon-dev \
             libfontconfig1-dev
 
-      # ========== macOS Dependencies ==========
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
         run: |
           brew update
           brew install openssl pkg-config
 
-      # ========== Windows Dependencies ==========
       - name: Install Windows dependencies
         if: runner.os == 'Windows'
         run: |
           choco install -y openssl
 
-      # ========== Rust Setup ==========
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -87,99 +144,56 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      # ========== Build ==========
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      # ========== Upload Artifact ==========
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.asset_name }}
-          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-          retention-days: 1
-
-  release:
-    name: Create Release
-    needs: build
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Prepare release assets
-        run: |
-          mkdir -p release-assets
-          
-          # Linux
-          if [ -f artifacts/rust-ytdownloader-linux-x86_64/rust-ytdownloader ]; then
-            chmod +x artifacts/rust-ytdownloader-linux-x86_64/rust-ytdownloader
-            mv artifacts/rust-ytdownloader-linux-x86_64/rust-ytdownloader release-assets/rust-ytdownloader-linux-x86_64
-          fi
-          
-          # Windows
-          if [ -f "artifacts/rust-ytdownloader-windows-x86_64.exe/rust-ytdownloader.exe" ]; then
-            mv "artifacts/rust-ytdownloader-windows-x86_64.exe/rust-ytdownloader.exe" release-assets/rust-ytdownloader-windows-x86_64.exe
-          fi
-          
-          # macOS Intel
-          if [ -f artifacts/rust-ytdownloader-macos-x86_64/rust-ytdownloader ]; then
-            chmod +x artifacts/rust-ytdownloader-macos-x86_64/rust-ytdownloader
-            mv artifacts/rust-ytdownloader-macos-x86_64/rust-ytdownloader release-assets/rust-ytdownloader-macos-x86_64
-          fi
-          
-          # macOS ARM
-          if [ -f artifacts/rust-ytdownloader-macos-aarch64/rust-ytdownloader ]; then
-            chmod +x artifacts/rust-ytdownloader-macos-aarch64/rust-ytdownloader
-            mv artifacts/rust-ytdownloader-macos-aarch64/rust-ytdownloader release-assets/rust-ytdownloader-macos-aarch64
-          fi
-          
-          ls -la release-assets/
-
-      - name: Get version from Cargo.toml
-        id: get_version
-        run: |
-          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Generate release tag
-        id: tag
-        run: |
-          TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
-          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          TAG="v${{ steps.get_version.outputs.version }}-${TIMESTAMP}-${SHORT_SHA}"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: Release ${{ steps.tag.outputs.tag }}
-          body: |
-            ## 🚀 Auto Release
-            
-            **Commit:** `${{ github.sha }}`
-            **Message:** ${{ github.event.head_commit.message }}
-            **Author:** ${{ github.event.head_commit.author.name }}
-            **Date:** ${{ github.event.head_commit.timestamp }}
-            
-            ### 📦 Downloads
-            
-            | Platform | File |
-            |----------|------|
-            | 🐧 Linux x86_64 | `rust-ytdownloader-linux-x86_64` |
-            | 🪟 Windows x86_64 | `rust-ytdownloader-windows-x86_64.exe` |
-            | 🍎 macOS Intel | `rust-ytdownloader-macos-x86_64` |
-            | 🍎 macOS Apple Silicon | `rust-ytdownloader-macos-aarch64` |
-          files: |
-            release-assets/*
-          draft: false
-          prerelease: false
+      - name: Upload binary to draft release
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          ASSET_PATH: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+          ASSET_NAME: ${{ matrix.asset_name }}
+        run: |
+          retry() {
+            delay=3
+            for attempt in 1 2 3 4 5; do
+              "$@" && return 0
+              if [ "$attempt" = 5 ]; then
+                return 1
+              fi
+              sleep "$delay"
+              delay=$((delay * 2))
+            done
+          }
+
+          test -f "$ASSET_PATH"
+          retry gh release upload "$TAG" "$ASSET_PATH#$ASSET_NAME" --clobber
+
+  publish-release:
+    name: Publish release
+    needs:
+      - prepare-release
+      - build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Publish draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          retry() {
+            delay=3
+            for attempt in 1 2 3 4 5; do
+              "$@" && return 0
+              if [ "$attempt" = 5 ]; then
+                return 1
+              fi
+              sleep "$delay"
+              delay=$((delay * 2))
+            done
+          }
+
+          retry gh release edit "$TAG" --draft=false --prerelease=false
