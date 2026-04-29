@@ -227,6 +227,10 @@ async function stopDownload() {
   render();
   try {
     await invoke("stop_download");
+    phase = "ready";
+    downloadMessage = "전체 작업이 취소되었습니다.";
+    setLog(downloadMessage);
+    render();
   } catch (error) {
     phase = "ready";
     errorMessage = String(error);
