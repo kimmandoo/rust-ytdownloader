@@ -27,6 +27,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "useLocalToolsDir": true,
     "icon": ["../assets/icon.ico", "../assets/icon.png"],
     "windows": {
       "webviewInstallMode": {

@@ -124,7 +124,21 @@ jobs:
         run: npm ci
 
       - name: Build release binary
-        run: npm run tauri build -- --target ${{ matrix.target }}
+        shell: bash
+        run: |
+          retry() {
+            delay=10
+            for attempt in 1 2 3; do
+              "$@" && return 0
+              if [ "$attempt" = 3 ]; then
+                return 1
+              fi
+              sleep "$delay"
+              delay=$((delay * 2))
+            done
+          }
+
+          retry npm run tauri build -- --target "${{ matrix.target }}"
 
       - name: Upload binary to draft release
         shell: bash
