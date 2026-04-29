@@ -236,9 +236,6 @@ fn open_folder(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let _ = Command::new("open").arg(path).spawn();
 
-    #[cfg(target_os = "linux")]
-    let _ = Command::new("xdg-open").arg(path).spawn();
-
     Ok(())
 }
 

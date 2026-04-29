@@ -16,13 +16,14 @@ pub enum InitStatus {
 
 type ValidatedResult<T> = Result<T, String>;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TargetOs {
     Windows,
     Macos,
-    Linux,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TargetArch {
     X86_64,
@@ -41,10 +42,6 @@ enum DependencyPackage {
         url: &'static str,
     },
     Zip {
-        url: &'static str,
-        archive_name: &'static str,
-    },
-    TarXz {
         url: &'static str,
         archive_name: &'static str,
     },
@@ -363,13 +360,6 @@ fn download_ffmpeg(
             extract_ffmpeg_zip(&archive_path, app_dir)?;
             let _ = fs::remove_file(archive_path);
         }
-        DependencyPackage::TarXz { url, archive_name } => {
-            let archive_path = app_dir.join(archive_name);
-            download_file(url, &archive_path, tx, "ffmpeg archive")?;
-            let _ = tx.send(InitStatus::Extracting("Extracting ffmpeg".to_string()));
-            extract_ffmpeg_tar_xz(&archive_path, app_dir)?;
-            let _ = fs::remove_file(archive_path);
-        }
     }
 
     check_ffmpeg(&get_ffmpeg_path(app_dir))?;
@@ -384,10 +374,6 @@ fn current_os() -> ValidatedResult<TargetOs> {
     #[cfg(target_os = "macos")]
     {
         return Ok(TargetOs::Macos);
-    }
-    #[cfg(target_os = "linux")]
-    {
-        return Ok(TargetOs::Linux);
     }
     #[allow(unreachable_code)]
     Err("unsupported operating system".to_string())
@@ -414,7 +400,6 @@ fn ytdlp_download_url(target: DependencyTarget) -> ValidatedResult<&'static str>
         TargetOs::Macos => {
             Ok("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos")
         }
-        TargetOs::Linux => Ok("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"),
     }
 }
 
@@ -431,12 +416,6 @@ fn deno_download_url(target: DependencyTarget) -> ValidatedResult<&'static str> 
         ),
         (TargetOs::Macos, TargetArch::Aarch64) => Ok(
             "https://github.com/denoland/deno/releases/latest/download/deno-aarch64-apple-darwin.zip",
-        ),
-        (TargetOs::Linux, TargetArch::X86_64) => Ok(
-            "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip",
-        ),
-        (TargetOs::Linux, TargetArch::Aarch64) => Ok(
-            "https://github.com/denoland/deno/releases/latest/download/deno-aarch64-unknown-linux-gnu.zip",
         ),
     }
 }
@@ -456,13 +435,6 @@ fn ffmpeg_package(target: DependencyTarget) -> ValidatedResult<DependencyPackage
         (TargetOs::Macos, TargetArch::Aarch64) => Ok(DependencyPackage::Binary {
             url: "https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-darwin-arm64",
         }),
-        (TargetOs::Linux, TargetArch::X86_64) => Ok(DependencyPackage::TarXz {
-            url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz",
-            archive_name: "ffmpeg.tar.xz",
-        }),
-        (TargetOs::Linux, TargetArch::Aarch64) => {
-            Err("automatic ffmpeg install is not available for Linux ARM64 yet".to_string())
-        }
     }
 }
 
@@ -494,39 +466,6 @@ fn extract_ffmpeg_zip(archive_path: &Path, app_dir: &Path) -> ValidatedResult<()
     }
 
     make_executable(&dest_path)
-}
-
-fn extract_ffmpeg_tar_xz(archive_path: &Path, app_dir: &Path) -> ValidatedResult<()> {
-    let status = Command::new("tar")
-        .arg("-xf")
-        .arg(archive_path)
-        .arg("-C")
-        .arg(app_dir)
-        .status()
-        .map_err(|e| format!("failed to run tar: {}", e))?;
-
-    if !status.success() {
-        return Err("failed to extract ffmpeg archive".to_string());
-    }
-
-    let dest_path = get_ffmpeg_path(app_dir);
-    for entry in fs::read_dir(app_dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if !entry.file_type().map_err(|e| e.to_string())?.is_dir()
-            || !entry.file_name().to_string_lossy().contains("ffmpeg")
-        {
-            continue;
-        }
-
-        let bin_path = entry.path().join("bin").join("ffmpeg");
-        if bin_path.exists() {
-            fs::rename(&bin_path, &dest_path).map_err(|e| e.to_string())?;
-            make_executable(&dest_path)?;
-            return Ok(());
-        }
-    }
-
-    Err("ffmpeg executable was not found in the archive".to_string())
 }
 
 fn make_executable(path: &Path) -> ValidatedResult<()> {
