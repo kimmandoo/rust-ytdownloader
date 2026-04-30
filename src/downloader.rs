@@ -1,4 +1,4 @@
-use image::{GenericImageView, ImageFormat};
+use image::{GenericImageView, codecs::jpeg::JpegEncoder};
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -503,8 +503,10 @@ fn crop_thumbnail_image_to_square(image_path: &PathBuf) -> std::io::Result<()> {
     let left = (width - side) / 2;
     let top = (height - side) / 2;
     let cropped = image.crop_imm(left, top, side, side);
-    cropped
-        .save_with_format(image_path, ImageFormat::Jpeg)
+    let file = fs::File::create(image_path)?;
+    let mut encoder = JpegEncoder::new_with_quality(file, 95);
+    encoder
+        .encode_image(&cropped)
         .map_err(std::io::Error::other)
 }
 
