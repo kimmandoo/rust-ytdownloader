@@ -129,6 +129,7 @@ fn fetch_playlist_info_with_retry(
     let ytdlp = get_ytdlp_path();
 
     let mut command = Command::new(&ytdlp);
+    crate::ytdlp::configure_ytdlp_command(&mut command);
     command.args(playlist_info_args(url));
 
     #[cfg(target_os = "windows")]

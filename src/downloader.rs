@@ -162,6 +162,7 @@ pub fn download_video(
     let _ = tx.send(DownloadStatus::Starting("다운로드 시작...".to_string()));
 
     let mut command = Command::new(&ytdlp);
+    crate::ytdlp::configure_ytdlp_command(&mut command);
     command
         .env("PATH", &new_path)
         .args(&args)
