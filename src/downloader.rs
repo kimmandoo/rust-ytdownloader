@@ -1,7 +1,7 @@
 use image::{GenericImageView, codecs::jpeg::JpegEncoder};
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
@@ -231,21 +231,19 @@ pub fn download_video(
 
     if let Some(out) = stdout {
         let reader = BufReader::new(out);
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                if detected_audio_output.is_none() {
-                    detected_audio_output = parse_extract_audio_output_line(&line);
-                }
+        for line in reader.lines().map_while(Result::ok) {
+            if detected_audio_output.is_none() {
+                detected_audio_output = parse_extract_audio_output_line(&line);
+            }
 
-                if let Some((percent, speed)) = parse_ytdlp_progress(&line) {
-                    let _ = tx.send(DownloadStatus::Progress(percent, speed));
-                } else {
-                    send_ytdlp_message(&tx, &line);
-                }
+            if let Some((percent, speed)) = parse_ytdlp_progress(&line) {
+                let _ = tx.send(DownloadStatus::Progress(percent, speed));
+            } else {
+                send_ytdlp_message(&tx, &line);
+            }
 
-                if line.contains("[ExtractAudio]") || line.contains("[Merger]") {
-                    let _ = tx.send(DownloadStatus::Converting);
-                }
+            if line.contains("[ExtractAudio]") || line.contains("[Merger]") {
+                let _ = tx.send(DownloadStatus::Converting);
             }
         }
     }
@@ -361,11 +359,7 @@ fn is_audio_format(format: &DownloadFormat) -> bool {
     )
 }
 
-fn audio_output_path(
-    output_dir: &PathBuf,
-    sanitized_title: &str,
-    format: &DownloadFormat,
-) -> PathBuf {
+fn audio_output_path(output_dir: &Path, sanitized_title: &str, format: &DownloadFormat) -> PathBuf {
     let ext = match format {
         DownloadFormat::Mp3 => "mp3",
         DownloadFormat::Wav => "wav",
@@ -378,15 +372,15 @@ fn audio_output_path(
 }
 
 fn resolve_audio_output_path(
-    output_dir: &PathBuf,
+    output_dir: &Path,
     sanitized_title: &str,
     format: &DownloadFormat,
     detected_path: Option<PathBuf>,
 ) -> PathBuf {
-    if let Some(path) = detected_path {
-        if path.exists() {
-            return path;
-        }
+    if let Some(path) = detected_path
+        && path.exists()
+    {
+        return path;
     }
 
     let expected = audio_output_path(output_dir, sanitized_title, format);
@@ -453,8 +447,8 @@ fn parse_extract_audio_output_line(line: &str) -> Option<PathBuf> {
 }
 
 fn resolve_thumbnail_path(
-    audio_path: &PathBuf,
-    output_dir: &PathBuf,
+    audio_path: &Path,
+    output_dir: &Path,
     sanitized_title: &str,
 ) -> Option<PathBuf> {
     let same_stem = audio_path.with_extension("jpg");

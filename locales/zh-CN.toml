@@ -16,7 +16,7 @@ downloading_retry = "正在重试 %{file}..."
 download_failed_retry = "下载失败（重试后）: %{error}"
 
 [main]
-title = "🎬 YouTube Downloader"
+title = "Spull"
 select_folder_msg = "请选择下载文件夹。"
 select_folder_btn = "选择文件夹"
 save_path = "保存路径: %{path}"

@@ -3,8 +3,12 @@
 use rust_yt::config::AppConfig;
 use rust_yt::downloader::{download_video, DownloadConfig, DownloadFormat, DownloadStatus};
 use rust_yt::initializer::{init_dependencies, InitStatus};
-use rust_yt::playlist::{fetch_playlist_info_with_channel, PlaylistInfo, VideoEntry};
-use rust_yt::ytdlp::YtDlpChannel;
+use rust_yt::playlist::{
+    fetch_playlist_info_with_channel, get_ytdlp_path, PlaylistInfo, VideoEntry,
+};
+use rust_yt::ytdlp::{
+    supported_sites as load_supported_sites, SupportedSites, YtDlpChannel,
+};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
@@ -44,6 +48,7 @@ struct DownloadEvent {
     total: usize,
     percent: f64,
     title: String,
+    source: Option<String>,
     message: String,
 }
 
@@ -56,6 +61,7 @@ fn main() {
             choose_folder,
             initialize,
             analyze_url,
+            supported_sites,
             start_download,
             stop_download,
             open_folder
@@ -85,7 +91,7 @@ fn choose_folder() -> Option<String> {
 
 #[tauri::command]
 fn initialize(app: AppHandle, ytdlp_channel: String) -> Result<(), String> {
-    let selected_channel = YtDlpChannel::from_str(&ytdlp_channel);
+    let selected_channel = YtDlpChannel::from_config_value(&ytdlp_channel);
     thread::spawn(move || {
         let (tx, rx) = channel();
         thread::spawn(move || init_dependencies(tx, selected_channel));
@@ -133,10 +139,17 @@ fn initialize(app: AppHandle, ytdlp_channel: String) -> Result<(), String> {
 #[tauri::command]
 async fn analyze_url(url: String, ytdlp_channel: String) -> Result<PlaylistInfo, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        fetch_playlist_info_with_channel(&url, YtDlpChannel::from_str(&ytdlp_channel))
+        fetch_playlist_info_with_channel(&url, YtDlpChannel::from_config_value(&ytdlp_channel))
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn supported_sites() -> Result<SupportedSites, String> {
+    tauri::async_runtime::spawn_blocking(move || load_supported_sites(&get_ytdlp_path()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -167,6 +180,9 @@ fn start_download(
         .first()
         .map(|entry| entry.title.clone())
         .unwrap_or_default();
+    let first_source = selected_entries
+        .first()
+        .and_then(|entry| entry.source.clone());
     let _ = app.emit(
         "download-progress",
         DownloadEvent {
@@ -175,6 +191,7 @@ fn start_download(
             total,
             percent: 0.0,
             title: first_title,
+            source: first_source,
             message: "다운로드 요청을 받았습니다.".to_string(),
         },
     );
@@ -190,7 +207,8 @@ fn start_download(
                         current,
                         total,
                         percent: 0.0,
-                        title: video.title,
+                        title: video.title.clone(),
+                        source: video.source.clone(),
                         message: "전체 작업이 취소되었습니다.".to_string(),
                     },
                 );
@@ -219,6 +237,7 @@ fn start_download(
                     total,
                     percent: 0.0,
                     title: video.title.clone(),
+                    source: video.source.clone(),
                     message: "yt-dlp 실행을 준비하고 있습니다.".to_string(),
                 },
             );
@@ -230,7 +249,13 @@ fn start_download(
             let mut failed_or_stopped = false;
             let mut reached_terminal_status = false;
             while let Ok(status) = status_rx.recv() {
-                let event = download_event_from_status(status, current, total, &video.title);
+                let event = download_event_from_status(
+                    status,
+                    current,
+                    total,
+                    &video.title,
+                    video.source.as_deref(),
+                );
                 failed_or_stopped = matches!(event.kind, "failed" | "stopped");
                 let _ = app.emit("download-progress", event.clone());
                 if matches!(event.kind, "completed" | "failed" | "stopped") {
@@ -255,6 +280,7 @@ fn start_download(
                         total,
                         percent: 0.0,
                         title: video.title,
+                        source: video.source,
                         message,
                     },
                 );
@@ -274,6 +300,7 @@ fn start_download(
                         total,
                         percent: 0.0,
                         title: video.title,
+                        source: video.source,
                         message: "전체 작업이 취소되었습니다.".to_string(),
                     },
                 );
@@ -289,6 +316,7 @@ fn start_download(
                 total,
                 percent: 100.0,
                 title: "완료".to_string(),
+                source: None,
                 message: "모든 작업이 완료되었습니다.".to_string(),
             },
         );
@@ -372,7 +400,9 @@ fn download_event_from_status(
     current: usize,
     total: usize,
     title: &str,
+    source: Option<&str>,
 ) -> DownloadEvent {
+    let source = source.map(str::to_string);
     match status {
         DownloadStatus::Starting(message) => DownloadEvent {
             kind: "starting",
@@ -380,6 +410,7 @@ fn download_event_from_status(
             total,
             percent: 0.0,
             title: title.to_string(),
+            source,
             message,
         },
         DownloadStatus::Progress(percent, message) => DownloadEvent {
@@ -388,6 +419,7 @@ fn download_event_from_status(
             total,
             percent,
             title: title.to_string(),
+            source,
             message,
         },
         DownloadStatus::Message(message) => DownloadEvent {
@@ -396,6 +428,7 @@ fn download_event_from_status(
             total,
             percent: 0.0,
             title: title.to_string(),
+            source,
             message,
         },
         DownloadStatus::Converting => DownloadEvent {
@@ -404,6 +437,7 @@ fn download_event_from_status(
             total,
             percent: 100.0,
             title: title.to_string(),
+            source,
             message: "변환 중".to_string(),
         },
         DownloadStatus::Completed(message) => DownloadEvent {
@@ -412,6 +446,7 @@ fn download_event_from_status(
             total,
             percent: 100.0,
             title: message,
+            source,
             message: "완료".to_string(),
         },
         DownloadStatus::Failed(message) => DownloadEvent {
@@ -420,6 +455,7 @@ fn download_event_from_status(
             total,
             percent: 0.0,
             title: title.to_string(),
+            source,
             message,
         },
         DownloadStatus::Stopped => DownloadEvent {
@@ -428,6 +464,7 @@ fn download_event_from_status(
             total,
             percent: 0.0,
             title: title.to_string(),
+            source,
             message: "전체 작업이 취소되었습니다.".to_string(),
         },
     }

@@ -66,9 +66,9 @@ jobs:
 
           | Platform | File |
           |----------|------|
-          | Windows x86_64 | `rust-ytdownloader-windows-x86_64.exe` |
-          | macOS Intel | `rust-ytdownloader-macos-x86_64.app.zip` |
-          | macOS Apple Silicon | `rust-ytdownloader-macos-aarch64.app.zip` |
+          | Windows x86_64 | `spull-windows-x86_64.exe` |
+          | macOS Intel | `spull-macos-x86_64.app.zip` |
+          | macOS Apple Silicon | `spull-macos-aarch64.app.zip` |
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -88,18 +88,18 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             build_args: --target x86_64-pc-windows-msvc --no-bundle
-            artifact_glob: src-tauri/target/x86_64-pc-windows-msvc/release/rust-ytdownloader-tauri.exe
-            asset_name: rust-ytdownloader-windows-x86_64.exe
+            artifact_glob: src-tauri/target/x86_64-pc-windows-msvc/release/spull-tauri.exe
+            asset_name: spull-windows-x86_64.exe
           - os: macos-latest
             target: x86_64-apple-darwin
             build_args: --target x86_64-apple-darwin --bundles app
             artifact_glob: src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app
-            asset_name: rust-ytdownloader-macos-x86_64.app.zip
+            asset_name: spull-macos-x86_64.app.zip
           - os: macos-latest
             target: aarch64-apple-darwin
             build_args: --target aarch64-apple-darwin --bundles app
             artifact_glob: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
-            asset_name: rust-ytdownloader-macos-aarch64.app.zip
+            asset_name: spull-macos-aarch64.app.zip
 
     steps:
       - name: Checkout repository
@@ -122,6 +122,12 @@ jobs:
           key: ${{ matrix.target }}
           workspaces: |
             src-tauri -> target
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
       - name: Install frontend dependencies
         run: npm ci

@@ -16,7 +16,7 @@ downloading_retry = "%{file} を再試行中..."
 download_failed_retry = "ダウンロードに失敗しました（再試行後）: %{error}"
 
 [main]
-title = "🎬 YouTube Downloader"
+title = "Spull"
 select_folder_msg = "ダウンロード先フォルダを選択してください。"
 select_folder_btn = "フォルダ選択"
 save_path = "保存先: %{path}"

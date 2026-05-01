@@ -1,5 +1,5 @@
 {
-  "name": "rust-ytdownloader-tauri",
+  "name": "spull-tauri",
   "version": "1.2.0",
   "private": true,
   "type": "module",
