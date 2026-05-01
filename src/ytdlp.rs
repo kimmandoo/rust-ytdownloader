@@ -58,6 +58,12 @@ fn js_runtime_args_for_deno_path(deno_path: &Path) -> Vec<String> {
     ]
 }
 
+pub fn configure_ytdlp_command(command: &mut Command) {
+    command
+        .env("PYTHONIOENCODING", "utf-8")
+        .env("PYTHONUTF8", "1");
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum YtDlpUpdateTarget {
     Current,
@@ -109,6 +115,7 @@ pub fn update_ytdlp_channel(ytdlp_path: &Path, channel: YtDlpChannel) -> YtDlpRe
 
 pub fn update_ytdlp_to(ytdlp_path: &Path, target: YtDlpUpdateTarget) -> YtDlpResult<String> {
     let mut cmd = Command::new(ytdlp_path);
+    configure_ytdlp_command(&mut cmd);
     cmd.args(update_args(target));
 
     #[cfg(target_os = "windows")]
@@ -183,6 +190,7 @@ pub fn featured_supported_sites() -> Vec<SupportedSite> {
 
 pub fn list_supported_extractors(ytdlp_path: &Path) -> YtDlpResult<Vec<SupportedSite>> {
     let mut cmd = Command::new(ytdlp_path);
+    configure_ytdlp_command(&mut cmd);
     cmd.arg("--list-extractors");
 
     #[cfg(target_os = "windows")]
@@ -419,6 +427,32 @@ mod tests {
                 "--js-runtimes".to_string(),
                 "deno:C:/tools/deno.exe".to_string()
             ]
+        );
+    }
+
+    #[test]
+    fn ytdlp_commands_force_utf8_python_stdio() {
+        let mut command = Command::new("yt-dlp");
+
+        configure_ytdlp_command(&mut command);
+
+        let envs = command
+            .get_envs()
+            .map(|(key, value)| {
+                (
+                    key.to_string_lossy().to_string(),
+                    value.map(|value| value.to_string_lossy().to_string()),
+                )
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+
+        assert_eq!(
+            envs.get("PYTHONIOENCODING").and_then(|value| value.as_deref()),
+            Some("utf-8")
+        );
+        assert_eq!(
+            envs.get("PYTHONUTF8").and_then(|value| value.as_deref()),
+            Some("1")
         );
     }
 
