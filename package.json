@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420 ui",
     "build": "vite build ui",
+    "test": "tsc ui/src/queue.ts --module NodeNext --moduleResolution NodeNext --target ES2022 --outDir .test-build --skipLibCheck && node --test ui/src/queue.test.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

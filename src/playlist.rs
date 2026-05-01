@@ -158,7 +158,7 @@ fn fetch_playlist_info_with_retry(
                 }
             }
         }
-        return Err(format!("영상 정보를 가져올 수 없습니다: {}", stderr));
+        return Err(format_playlist_fetch_error(&stderr));
     }
 
     let json_str = String::from_utf8_lossy(&output.stdout);
@@ -282,6 +282,25 @@ fn playlist_info_args(url: &str) -> Vec<String> {
     args.extend(crate::ytdlp::js_runtime_args());
     args.push(url.to_string());
     args
+}
+
+fn format_playlist_fetch_error(stderr: &str) -> String {
+    let stderr = stderr.trim();
+    let lowered = stderr.to_ascii_lowercase();
+
+    if lowered.contains("connectionreseterror(10054")
+        || lowered.contains("connection reset by peer")
+        || lowered.contains("connection aborted")
+    {
+        return "영상 정보를 가져올 수 없습니다: 원격 사이트가 연결을 강제로 종료했습니다. 잠시 후 다시 시도하거나 링크 접근 가능 여부, VPN/방화벽, 네트워크 상태를 확인해 주세요."
+            .to_string();
+    }
+
+    if stderr.is_empty() {
+        "영상 정보를 가져올 수 없습니다.".to_string()
+    } else {
+        format!("영상 정보를 가져올 수 없습니다: {}", stderr)
+    }
 }
 
 #[cfg(test)]
@@ -442,5 +461,15 @@ mod tests {
             args.windows(2)
                 .any(|pair| pair == ["--socket-timeout", "30"])
         );
+    }
+
+    #[test]
+    fn connection_reset_errors_are_summarized_for_users() {
+        let stderr = "ERROR: [example] abc: Unable to download webpage: ('Connection aborted.', ConnectionResetError(10054, '���� ������ ���� ȣ��Ʈ�� ���� ������ ������ϴ�', None, 10054, None))";
+
+        let message = format_playlist_fetch_error(stderr);
+
+        assert!(message.contains("연결을 강제로 종료"));
+        assert!(!message.contains("����"));
     }
 }
