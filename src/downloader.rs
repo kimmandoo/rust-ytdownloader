@@ -217,14 +217,14 @@ pub fn download_video(
     let stderr_reader_handle = thread::spawn(move || {
         if let Some(err) = stderr {
             let reader = BufReader::new(err);
-            for line in reader.lines().map_while(Result::ok) {
-                send_ytdlp_message(&tx_for_stderr, &line);
+            read_process_lines_lossy(reader, |line| {
+                send_ytdlp_message(&tx_for_stderr, line);
                 let mut tail = stderr_tail_for_thread.lock().unwrap();
-                tail.push(line);
+                tail.push(line.to_string());
                 if tail.len() > 5 {
                     tail.remove(0);
                 }
-            }
+            });
         }
     });
 
@@ -232,21 +232,21 @@ pub fn download_video(
 
     if let Some(out) = stdout {
         let reader = BufReader::new(out);
-        for line in reader.lines().map_while(Result::ok) {
+        read_process_lines_lossy(reader, |line| {
             if detected_audio_output.is_none() {
-                detected_audio_output = parse_extract_audio_output_line(&line);
+                detected_audio_output = parse_extract_audio_output_line(line);
             }
 
-            if let Some((percent, speed)) = parse_ytdlp_progress(&line) {
+            if let Some((percent, speed)) = parse_ytdlp_progress(line) {
                 let _ = tx.send(DownloadStatus::Progress(percent, speed));
             } else {
-                send_ytdlp_message(&tx, &line);
+                send_ytdlp_message(&tx, line);
             }
 
             if line.contains("[ExtractAudio]") || line.contains("[Merger]") {
                 let _ = tx.send(DownloadStatus::Converting);
             }
-        }
+        });
     }
 
     // 프로세스 종료 대기
@@ -333,6 +333,28 @@ fn send_ytdlp_message(tx: &Sender<DownloadStatus>, line: &str) {
             let _ = tx.send(DownloadStatus::Progress(percent, speed));
         } else {
             let _ = tx.send(DownloadStatus::Message(line.to_string()));
+        }
+    }
+}
+
+fn read_process_lines_lossy<R, F>(mut reader: R, mut on_line: F)
+where
+    R: BufRead,
+    F: FnMut(&str),
+{
+    let mut bytes = Vec::new();
+    loop {
+        bytes.clear();
+        match reader.read_until(b'\n', &mut bytes) {
+            Ok(0) => break,
+            Ok(_) => {
+                while matches!(bytes.last(), Some(b'\n' | b'\r')) {
+                    bytes.pop();
+                }
+                let line = String::from_utf8_lossy(&bytes);
+                on_line(&line);
+            }
+            Err(_) => break,
         }
     }
 }
@@ -584,7 +606,8 @@ fn sanitize_filename(filename: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_ytdlp_progress;
+    use super::{parse_ytdlp_progress, read_process_lines_lossy};
+    use std::io::{BufReader, Cursor};
 
     #[test]
     fn parses_ytdlp_progress_line() {
@@ -601,6 +624,22 @@ mod tests {
         assert_eq!(
             parse_ytdlp_progress("[download] Destination: video.webm"),
             None
+        );
+    }
+
+    #[test]
+    fn process_output_reader_continues_after_non_utf8_line() {
+        let bytes = b"\xff\xfe bad title\r\n[download]  42.7% of 10.00MiB at 1.25MiB/s ETA 00:04\n";
+        let reader = BufReader::new(Cursor::new(bytes));
+        let mut lines = Vec::new();
+
+        read_process_lines_lossy(reader, |line| lines.push(line.to_string()));
+
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("bad title"));
+        assert_eq!(
+            parse_ytdlp_progress(&lines[1]),
+            Some((42.7, "1.25MiB/s".to_string()))
         );
     }
 }
