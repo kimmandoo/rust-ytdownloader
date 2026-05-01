@@ -15,6 +15,8 @@ pub struct VideoEntry {
     pub id: String,
     pub title: String,
     pub url: String,
+    #[serde(default)]
+    pub source: Option<String>,
     pub thumbnail: Option<String>, // [NEW] 썸네일 URL
     pub duration: Option<f64>,
     pub duration_string: Option<String>,
@@ -46,6 +48,10 @@ struct YtDlpResponse {
     #[serde(default)]
     webpage_url: Option<String>,
     #[serde(default)]
+    extractor: Option<String>,
+    #[serde(default)]
+    extractor_key: Option<String>,
+    #[serde(default)]
     thumbnail: Option<String>, // [NEW]
     #[serde(default)]
     duration: Option<f64>,
@@ -65,6 +71,12 @@ struct YtDlpEntry {
     title: Option<String>,
     #[serde(default)]
     url: Option<String>,
+    #[serde(default)]
+    webpage_url: Option<String>,
+    #[serde(default)]
+    extractor: Option<String>,
+    #[serde(default)]
+    extractor_key: Option<String>,
     #[serde(default)]
     thumbnail: Option<String>, // [NEW]
     #[serde(default)]
@@ -152,7 +164,19 @@ fn fetch_playlist_info_with_retry(
     let response: YtDlpResponse =
         serde_json::from_str(&json_str).map_err(|e| format!("JSON 파싱 실패: {}", e))?;
 
+    playlist_info_from_response(response, url)
+}
+
+fn playlist_info_from_response(
+    response: YtDlpResponse,
+    source_url: &str,
+) -> Result<PlaylistInfo, String> {
     let is_playlist = response.response_type.as_deref() == Some("playlist");
+    let parent_source = crate::ytdlp::source_display_name(
+        response.extractor.as_deref(),
+        response.extractor_key.as_deref(),
+        source_url,
+    );
 
     if is_playlist {
         // 플레이리스트
@@ -162,12 +186,18 @@ fn fetch_playlist_info_with_retry(
             .into_iter()
             .filter_map(|e| {
                 let id = e.id?;
+                let url = resolve_entry_url(e.webpage_url, e.url, &id, source_url)?;
+                let source = crate::ytdlp::source_display_name(
+                    e.extractor.as_deref(),
+                    e.extractor_key.as_deref(),
+                    &url,
+                )
+                .or_else(|| parent_source.clone());
                 Some(VideoEntry {
                     id: id.clone(),
                     title: e.title.unwrap_or_else(|| "제목 없음".to_string()),
-                    url: e
-                        .url
-                        .unwrap_or_else(|| format!("https://www.youtube.com/watch?v={}", id)),
+                    url,
+                    source,
                     thumbnail: e.thumbnail,
                     duration: e.duration,
                     duration_string: e.duration_string,
@@ -183,13 +213,23 @@ fn fetch_playlist_info_with_retry(
         })
     } else {
         // 단일 영상
+        let entry_url = response
+            .webpage_url
+            .clone()
+            .unwrap_or_else(|| source_url.to_string());
+        let source = crate::ytdlp::source_display_name(
+            response.extractor.as_deref(),
+            response.extractor_key.as_deref(),
+            &entry_url,
+        );
         let entry = VideoEntry {
             id: response.id.unwrap_or_default(),
             title: response
                 .title
                 .clone()
                 .unwrap_or_else(|| "제목 없음".to_string()),
-            url: response.webpage_url.unwrap_or_else(|| url.to_string()),
+            url: entry_url,
+            source,
             thumbnail: response.thumbnail,
             duration: response.duration,
             duration_string: response.duration_string,
@@ -202,6 +242,32 @@ fn fetch_playlist_info_with_retry(
             is_playlist: false,
         })
     }
+}
+
+fn resolve_entry_url(
+    webpage_url: Option<String>,
+    url: Option<String>,
+    id: &str,
+    source_url: &str,
+) -> Option<String> {
+    if let Some(webpage_url) = webpage_url.filter(|value| is_absolute_http_url(value)) {
+        return Some(webpage_url);
+    }
+
+    if let Some(url) = url.filter(|value| is_absolute_http_url(value)) {
+        return Some(url);
+    }
+
+    if crate::ytdlp::is_youtube_url(source_url) {
+        return Some(format!("https://www.youtube.com/watch?v={}", id));
+    }
+
+    None
+}
+
+fn is_absolute_http_url(value: &str) -> bool {
+    let value = value.to_ascii_lowercase();
+    value.starts_with("https://") || value.starts_with("http://")
 }
 
 fn playlist_info_args(url: &str) -> Vec<String> {
@@ -220,6 +286,152 @@ fn playlist_info_args(url: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn youtube_playlist_entries_without_urls_keep_youtube_fallback() {
+        let response = YtDlpResponse {
+            title: Some("Mix".to_string()),
+            id: None,
+            webpage_url: None,
+            extractor: None,
+            extractor_key: None,
+            thumbnail: None,
+            duration: None,
+            duration_string: None,
+            entries: Some(vec![YtDlpEntry {
+                id: Some("abc123".to_string()),
+                title: Some("Track".to_string()),
+                url: None,
+                webpage_url: None,
+                extractor: None,
+                extractor_key: None,
+                thumbnail: None,
+                duration: None,
+                duration_string: None,
+            }]),
+            response_type: Some("playlist".to_string()),
+        };
+
+        let info =
+            playlist_info_from_response(response, "https://www.youtube.com/playlist?list=example")
+                .unwrap();
+
+        assert_eq!(
+            info.entries[0].url,
+            "https://www.youtube.com/watch?v=abc123"
+        );
+    }
+
+    #[test]
+    fn generic_playlist_entries_without_urls_are_skipped() {
+        let response = YtDlpResponse {
+            title: Some("Creator feed".to_string()),
+            id: None,
+            webpage_url: None,
+            extractor: None,
+            extractor_key: None,
+            thumbnail: None,
+            duration: None,
+            duration_string: None,
+            entries: Some(vec![YtDlpEntry {
+                id: Some("post-1".to_string()),
+                title: Some("Clip".to_string()),
+                url: None,
+                webpage_url: None,
+                extractor: None,
+                extractor_key: None,
+                thumbnail: None,
+                duration: None,
+                duration_string: None,
+            }]),
+            response_type: Some("playlist".to_string()),
+        };
+
+        let info = playlist_info_from_response(response, "https://example.com/creator").unwrap();
+
+        assert!(info.entries.is_empty());
+    }
+
+    #[test]
+    fn generic_playlist_entries_prefer_webpage_urls() {
+        let response = YtDlpResponse {
+            title: Some("Creator feed".to_string()),
+            id: None,
+            webpage_url: None,
+            extractor: None,
+            extractor_key: None,
+            thumbnail: None,
+            duration: None,
+            duration_string: None,
+            entries: Some(vec![YtDlpEntry {
+                id: Some("post-1".to_string()),
+                title: Some("Clip".to_string()),
+                url: Some("post-1".to_string()),
+                webpage_url: Some("https://example.com/watch/post-1".to_string()),
+                extractor: None,
+                extractor_key: None,
+                thumbnail: None,
+                duration: None,
+                duration_string: None,
+            }]),
+            response_type: Some("playlist".to_string()),
+        };
+
+        let info = playlist_info_from_response(response, "https://example.com/creator").unwrap();
+
+        assert_eq!(info.entries[0].url, "https://example.com/watch/post-1");
+    }
+
+    #[test]
+    fn single_video_includes_extractor_source() {
+        let response = YtDlpResponse {
+            title: Some("Short clip".to_string()),
+            id: Some("clip-1".to_string()),
+            webpage_url: Some("https://www.tiktok.com/@spull/video/1".to_string()),
+            extractor: Some("TikTok".to_string()),
+            extractor_key: Some("TikTok".to_string()),
+            thumbnail: None,
+            duration: None,
+            duration_string: None,
+            entries: None,
+            response_type: None,
+        };
+
+        let info =
+            playlist_info_from_response(response, "https://www.tiktok.com/@spull/video/1").unwrap();
+
+        assert_eq!(info.entries[0].source.as_deref(), Some("TikTok"));
+    }
+
+    #[test]
+    fn playlist_entry_prefers_entry_source_over_parent_source() {
+        let response = YtDlpResponse {
+            title: Some("Mixed feed".to_string()),
+            id: None,
+            webpage_url: None,
+            extractor: Some("Generic".to_string()),
+            extractor_key: Some("Generic".to_string()),
+            thumbnail: None,
+            duration: None,
+            duration_string: None,
+            entries: Some(vec![YtDlpEntry {
+                id: Some("track-1".to_string()),
+                title: Some("Track".to_string()),
+                url: Some("https://soundcloud.com/spull/track-1".to_string()),
+                webpage_url: Some("https://soundcloud.com/spull/track-1".to_string()),
+                extractor: Some("SoundCloud".to_string()),
+                extractor_key: Some("SoundCloud".to_string()),
+                thumbnail: None,
+                duration: None,
+                duration_string: None,
+            }]),
+            response_type: Some("playlist".to_string()),
+        };
+
+        let info = playlist_info_from_response(response, "https://example.com/feed").unwrap();
+
+        assert_eq!(info.entries[0].source.as_deref(), Some("SoundCloud"));
+    }
 
     #[test]
     fn playlist_info_uses_30_second_socket_timeout() {

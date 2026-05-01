@@ -1,6 +1,6 @@
-# YouTube Downloader
+# Spull
 
-A YouTube downloader for Windows and macOS with a Rust core and a Tauri desktop UI.
+Spull is a desktop media downloader for Windows and macOS with a Rust core and a Tauri UI.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Build Status](https://github.com/kimmandoo/rust-ytdownloader/actions/workflows/release.yml/badge.svg)
@@ -9,6 +9,7 @@ A YouTube downloader for Windows and macOS with a Rust core and a Tauri desktop 
 
 - Tauri desktop app with a polished, scrollable WebView UI.
 - Rust download core using `yt-dlp`, `ffmpeg`, and Deno setup.
+- Stable support for YouTube URLs, with experimental support for other `yt-dlp`-compatible media sites.
 - Audio formats: MP3, WAV, M4A, FLAC.
 - Video formats: MP4, WEBM.
 - Playlist analysis with per-video selection.
@@ -49,7 +50,7 @@ The frontend dev server runs at `http://127.0.0.1:1420`.
 
 ## Legal Disclaimer
 
-This project is for educational and personal use only. Users are responsible for complying with YouTube's Terms of Service and copyright law. Do not download copyrighted material unless you have the right to do so.
+This project is for educational and personal use only. Users are responsible for complying with each source site's terms of service and copyright law. Do not download copyrighted material unless you have the right to do so.
 
 ## License
 

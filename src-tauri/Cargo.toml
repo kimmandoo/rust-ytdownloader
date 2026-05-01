@@ -1,14 +1,14 @@
 [package]
-name = "rust-ytdownloader-tauri"
+name = "spull-tauri"
 version = "1.2.0"
-description = "A polished desktop YouTube downloader built with Tauri"
+description = "A polished desktop media downloader built with Tauri"
 edition = "2021"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-rust_yt = { package = "rust-ytdownloader", path = ".." }
+rust_yt = { package = "spull", path = ".." }
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
 rfd = "0.17.1"

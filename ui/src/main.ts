@@ -15,6 +15,7 @@ type VideoEntry = {
   id: string;
   title: string;
   url: string;
+  source?: string | null;
   thumbnail?: string | null;
   duration?: number | null;
   duration_string?: string | null;
@@ -47,7 +48,20 @@ type DownloadEvent = {
   total: number;
   percent: number;
   title: string;
+  source?: string | null;
   message: string;
+};
+
+type SiteStatus = "stable" | "experimental" | "broken";
+
+type SupportedSite = {
+  name: string;
+  status: SiteStatus;
+};
+
+type SupportedSites = {
+  featured: SupportedSite[];
+  extractors: SupportedSite[];
 };
 
 const formats: Array<{ value: DownloadFormat; label: string; tone: string }> = [
@@ -86,6 +100,12 @@ let downloadCurrent = 0;
 let downloadTotal = 0;
 let downloadEventCount = 0;
 let logs: string[] = [];
+let supportPanelOpen = false;
+let supportExpanded = false;
+let supportQuery = "";
+let supportLoading = false;
+let supportError = "";
+let supportedSites: SupportedSites | null = null;
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const isTauriRuntime = "__TAURI_INTERNALS__" in window;
@@ -104,6 +124,120 @@ function formatDuration(entry: VideoEntry): string {
 
 function selectedEntries(): VideoEntry[] {
   return playlist?.entries.filter((entry) => entry.selected) ?? [];
+}
+
+function isYoutubeUrl(value: string): boolean {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname === "youtu.be" || hostname.endsWith(".youtube.com") || hostname === "youtube.com";
+  } catch {
+    const normalized = value.toLowerCase();
+    return normalized.includes("youtube.com/") || normalized.includes("youtu.be/");
+  }
+}
+
+function sourceSupportCopy(value: string): string {
+  if (!value.trim()) {
+    return "YouTube is stable. Other yt-dlp compatible sites are experimental.";
+  }
+  return isYoutubeUrl(value)
+    ? "Stable YouTube support"
+    : "Experimental support through yt-dlp";
+}
+
+function sampleSupportedSites(): SupportedSites {
+  return {
+    featured: [
+      { name: "YouTube", status: "stable" },
+      { name: "YouTube Music", status: "stable" },
+      { name: "TikTok", status: "experimental" },
+      { name: "SoundCloud", status: "experimental" },
+      { name: "Vimeo", status: "experimental" },
+      { name: "X/Twitter", status: "experimental" },
+      { name: "Instagram", status: "experimental" },
+      { name: "Twitch", status: "experimental" },
+      { name: "Facebook", status: "experimental" },
+      { name: "Bilibili", status: "experimental" },
+      { name: "Niconico", status: "experimental" },
+    ],
+    extractors: [
+      { name: "youtube", status: "experimental" },
+      { name: "TikTok", status: "experimental" },
+      { name: "SoundCloud", status: "experimental" },
+      { name: "Vimeo", status: "experimental" },
+      { name: "247sports", status: "broken" },
+    ],
+  };
+}
+
+function statusLabel(status: SiteStatus): string {
+  if (status === "stable") return "안정";
+  if (status === "broken") return "불안정";
+  return "실험";
+}
+
+function renderSitePill(site: SupportedSite): string {
+  return `
+    <span class="site-pill ${site.status}">
+      <strong>${escapeHtml(site.name)}</strong>
+      <em>${statusLabel(site.status)}</em>
+    </span>
+  `;
+}
+
+function filteredExtractors(): SupportedSite[] {
+  const sites = supportedSites?.extractors ?? [];
+  const query = supportQuery.trim().toLowerCase();
+  if (!query) return sites;
+  return sites.filter((site) => site.name.toLowerCase().includes(query));
+}
+
+function renderSourceBadge(source?: string | null): string {
+  if (!source) return "";
+  return `<span class="source-badge">${escapeHtml(source)}</span>`;
+}
+
+function renderExtractorList(): string {
+  const extractors = filteredExtractors();
+  return extractors.map(renderSitePill).join("") || `<p class="support-note">검색 결과가 없습니다.</p>`;
+}
+
+function withSource(value: string, source?: string | null): string {
+  return source ? `${value} (${source})` : value;
+}
+
+async function toggleSupportPanel() {
+  supportPanelOpen = !supportPanelOpen;
+  if (!supportPanelOpen) {
+    render();
+    return;
+  }
+
+  if (supportedSites || supportLoading) {
+    render();
+    return;
+  }
+
+  supportLoading = true;
+  supportError = "";
+  render();
+
+  if (!isTauriRuntime) {
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+    supportedSites = sampleSupportedSites();
+    supportLoading = false;
+    render();
+    return;
+  }
+
+  try {
+    supportedSites = await invoke<SupportedSites>("supported_sites");
+  } catch (error) {
+    supportError = String(error);
+  } finally {
+    supportLoading = false;
+    render();
+  }
 }
 
 function setLog(message: string) {
@@ -134,7 +268,7 @@ async function chooseFolder() {
 
 async function analyze() {
   if (!url.trim()) {
-    errorMessage = "YouTube URL을 입력해 주세요.";
+    errorMessage = "URL을 입력해 주세요.";
     render();
     return;
   }
@@ -268,9 +402,9 @@ function render() {
     <main class="shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="brand-mark">YT</div>
+          <div class="brand-mark">SP</div>
           <div>
-            <h1>YouTube Downloader</h1>
+            <h1>Spull</h1>
           </div>
         </div>
 
@@ -285,13 +419,16 @@ function render() {
           <div class="panel-head">
             <div>
               <p class="eyebrow">Source</p>
-              <h3>영상 URL</h3>
+              <h3>Media URL</h3>
             </div>
+            <button class="tiny-button" id="supportSitesButton">지원 사이트</button>
           </div>
           <div class="url-row">
-            <input id="urlInput" value="${escapeHtml(url)}" placeholder="https://www.youtube.com/watch?v=..." />
+            <input id="urlInput" value="${escapeHtml(url)}" placeholder="https://www.youtube.com/watch?v=... or any yt-dlp URL" />
             <button id="analyzeButton" ${phase === "analyzing" || phase === "downloading" ? "disabled" : ""}>${phase === "analyzing" ? "분석 중" : "분석"}</button>
           </div>
+          <p class="support-note">${sourceSupportCopy(url)}</p>
+          ${supportPanelOpen ? renderSupportPanel() : ""}
           <div class="path-row">
             <span>저장 위치</span>
             <strong title="${escapeHtml(settings.download_dir ?? "")}">${settings.download_dir ? escapeHtml(settings.download_dir) : "폴더를 선택해 주세요."}</strong>
@@ -349,6 +486,59 @@ function renderPhase(target: typeof phase, label: string) {
   return `<span class="phase-tab ${active ? "active" : ""}">${label}</span>`;
 }
 
+function renderSupportPanel() {
+  if (supportLoading) {
+    return `
+      <div class="support-panel">
+        <div class="support-panel-head">
+          <strong>지원 사이트</strong>
+          <button class="tiny-button" id="supportClose">닫기</button>
+        </div>
+        <p class="support-note">yt-dlp 지원 목록을 불러오는 중입니다.</p>
+      </div>
+    `;
+  }
+
+  if (supportError) {
+    return `
+      <div class="support-panel">
+        <div class="support-panel-head">
+          <strong>지원 사이트</strong>
+          <button class="tiny-button" id="supportClose">닫기</button>
+        </div>
+        <p class="support-error">${escapeHtml(supportError)}</p>
+      </div>
+    `;
+  }
+
+  const featured = supportedSites?.featured ?? [];
+  return `
+    <div class="support-panel">
+      <div class="support-panel-head">
+        <strong>지원 사이트</strong>
+        <button class="tiny-button" id="supportClose">닫기</button>
+      </div>
+      <p class="support-note">대표 사이트를 먼저 보여주고, 전체 목록은 현재 설치된 yt-dlp 기준입니다.</p>
+      <div class="site-pill-grid">
+        ${featured.map(renderSitePill).join("")}
+      </div>
+      <button class="ghost-button support-toggle" id="supportExpand">
+        ${supportExpanded ? "전체 목록 접기" : `전체 yt-dlp 목록 보기 (${supportedSites?.extractors.length ?? 0})`}
+      </button>
+      ${
+        supportExpanded
+          ? `
+            <input id="supportSearch" class="support-search" value="${escapeHtml(supportQuery)}" placeholder="사이트 이름 검색" />
+            <div class="extractor-list">
+              ${renderExtractorList()}
+            </div>
+          `
+          : ""
+      }
+    </div>
+  `;
+}
+
 function renderBootPanel() {
   return `
     <section class="panel boot-panel">
@@ -369,8 +559,8 @@ function renderQueuePanel(selectedCount: number, totalCount: number) {
         <div class="empty-illustration"></div>
         <div>
           <p class="eyebrow">Ready</p>
-          <h3>URL을 넣으면 목록이 여기에 나타납니다.</h3>
-          <p>분석 후 필요한 항목만 선택해서 다운로드할 수 있습니다.</p>
+          <h3>Paste a media URL to analyze it.</h3>
+          <p>YouTube URLs are treated as stable. Other yt-dlp compatible sites are available as experimental sources.</p>
         </div>
       </section>
     `;
@@ -401,7 +591,10 @@ function renderQueuePanel(selectedCount: number, totalCount: number) {
                 <div class="thumb">${entry.thumbnail ? `<img src="${escapeHtml(entry.thumbnail)}" alt="" />` : `<span>${index + 1}</span>`}</div>
                 <div class="video-meta">
                   <h4>${index + 1}. ${escapeHtml(entry.title)}</h4>
-                  <p>${escapeHtml(formatDuration(entry))}</p>
+                  <div class="video-detail-row">
+                    <span>${escapeHtml(formatDuration(entry))}</span>
+                    ${renderSourceBadge(entry.source)}
+                  </div>
                 </div>
               </article>
             `,
@@ -458,6 +651,28 @@ function bindEvents() {
   document
     .querySelector<HTMLButtonElement>("#analyzeButton")
     ?.addEventListener("click", analyze);
+  document
+    .querySelector<HTMLButtonElement>("#supportSitesButton")
+    ?.addEventListener("click", toggleSupportPanel);
+  document
+    .querySelector<HTMLButtonElement>("#supportClose")
+    ?.addEventListener("click", () => {
+      supportPanelOpen = false;
+      render();
+    });
+  document
+    .querySelector<HTMLButtonElement>("#supportExpand")
+    ?.addEventListener("click", () => {
+      supportExpanded = !supportExpanded;
+      render();
+    });
+  document
+    .querySelector<HTMLInputElement>("#supportSearch")
+    ?.addEventListener("input", (event) => {
+      supportQuery = (event.target as HTMLInputElement).value;
+      const list = document.querySelector<HTMLDivElement>(".extractor-list");
+      if (list) list.innerHTML = renderExtractorList();
+    });
   document
     .querySelector<HTMLInputElement>("#urlInput")
     ?.addEventListener("input", (event) => {
@@ -547,13 +762,13 @@ async function boot() {
     downloadCurrent = payload.current;
     downloadTotal = payload.total;
     downloadPercent = payload.percent;
-    downloadTitle = payload.title;
+    downloadTitle = withSource(payload.title, payload.source);
     downloadMessage = payload.message;
 
     if (payload.kind === "starting" || payload.kind === "message" || payload.kind === "converting") {
-      setLog(payload.message);
+      setLog(withSource(payload.message, payload.source));
     }
-    if (payload.kind === "completed") setLog(`완료: ${payload.title}`);
+    if (payload.kind === "completed") setLog(`완료: ${withSource(payload.title, payload.source)}`);
     if (payload.kind === "failed") {
       phase = "ready";
       errorMessage = payload.message;
@@ -579,14 +794,14 @@ async function boot() {
 
 function samplePlaylist(): PlaylistInfo {
   return {
-    title: "디자인 미리보기 플레이리스트",
+    title: "Spull preview queue",
     is_playlist: true,
     entries: [
       {
         id: "preview-1",
-        title:
-          "긴 제목도 목록 안에서 안정적으로 보이는 샘플 영상입니다.",
+        title: "Stable YouTube sample",
         url: "https://youtu.be/preview-1",
+        source: "YouTube",
         thumbnail: null,
         duration: 245,
         duration_string: "4:05",
@@ -594,8 +809,9 @@ function samplePlaylist(): PlaylistInfo {
       },
       {
         id: "preview-2",
-        title: "라이브 세션 하이라이트",
-        url: "https://youtu.be/preview-2",
+        title: "Experimental short-form clip sample",
+        url: "https://www.tiktok.com/@example/video/preview-2",
+        source: "TikTok",
         thumbnail: null,
         duration: 632,
         duration_string: "10:32",
@@ -603,8 +819,9 @@ function samplePlaylist(): PlaylistInfo {
       },
       {
         id: "preview-3",
-        title: "오디오 추출 테스트",
-        url: "https://youtu.be/preview-3",
+        title: "Experimental audio source sample",
+        url: "https://soundcloud.com/example/preview-3",
+        source: "SoundCloud",
         thumbnail: null,
         duration: 188,
         duration_string: "3:08",
@@ -625,9 +842,10 @@ function simulateDownload(entries: VideoEntry[]) {
     );
     downloadTotal = entries.length;
     downloadPercent = Math.min(100, Math.round((tick / totalTicks) * 100));
-    downloadTitle =
-      entries[Math.min(entries.length - 1, downloadCurrent - 1)]?.title ??
-      "다운로드 중";
+    const currentEntry = entries[Math.min(entries.length - 1, downloadCurrent - 1)];
+    downloadTitle = currentEntry
+      ? withSource(currentEntry.title, currentEntry.source)
+      : "다운로드 중";
     downloadMessage = `${downloadPercent}%`;
     if (tick % 6 === 0)
       setLog(`[preview] ${downloadMessage} - ${downloadTitle}`);

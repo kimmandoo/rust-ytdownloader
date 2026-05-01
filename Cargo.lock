@@ -3954,28 +3954,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-ytdownloader"
-version = "1.2.0"
-dependencies = [
- "backoff",
- "dirs",
- "eframe",
- "egui_extras",
- "image",
- "indicatif",
- "reqwest",
- "rfd",
- "rust-i18n",
- "serde",
- "serde_json",
- "sys-locale",
- "tokio",
- "toml 0.8.23",
- "winres",
- "zip",
-]
-
-[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4387,6 +4365,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eda41003dc44290527a59b13432d4a0379379fa074b70174882adfbdfd917844"
 dependencies = [
  "bitflags 2.10.0",
+]
+
+[[package]]
+name = "spull"
+version = "1.2.0"
+dependencies = [
+ "backoff",
+ "dirs",
+ "eframe",
+ "egui_extras",
+ "image",
+ "indicatif",
+ "reqwest",
+ "rfd",
+ "rust-i18n",
+ "serde",
+ "serde_json",
+ "sys-locale",
+ "tokio",
+ "toml 0.8.23",
+ "winres",
+ "zip",
 ]
 
 [[package]]

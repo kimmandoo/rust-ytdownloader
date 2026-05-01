@@ -25,7 +25,7 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        "YouTube Downloader",
+        "Spull",
         options,
         Box::new(|cc| {
             setup_custom_fonts(&cc.egui_ctx);

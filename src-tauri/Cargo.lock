@@ -3903,37 +3903,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-ytdownloader"
-version = "1.2.0"
-dependencies = [
- "backoff",
- "dirs 5.0.1",
- "image",
- "indicatif",
- "reqwest 0.12.28",
- "rfd",
- "rust-i18n",
- "serde",
- "serde_json",
- "sys-locale",
- "tokio",
- "toml 0.8.23",
- "winres",
- "zip",
-]
-
-[[package]]
-name = "rust-ytdownloader-tauri"
-version = "1.2.0"
-dependencies = [
- "rfd",
- "rust-ytdownloader",
- "serde",
- "tauri",
- "tauri-build",
-]
-
-[[package]]
 name = "rustc-hash"
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4482,6 +4451,37 @@ dependencies = [
  "gobject-sys",
  "libc",
  "system-deps",
+]
+
+[[package]]
+name = "spull"
+version = "1.2.0"
+dependencies = [
+ "backoff",
+ "dirs 5.0.1",
+ "image",
+ "indicatif",
+ "reqwest 0.12.28",
+ "rfd",
+ "rust-i18n",
+ "serde",
+ "serde_json",
+ "sys-locale",
+ "tokio",
+ "toml 0.8.23",
+ "winres",
+ "zip",
+]
+
+[[package]]
+name = "spull-tauri"
+version = "1.2.0"
+dependencies = [
+ "rfd",
+ "serde",
+ "spull",
+ "tauri",
+ "tauri-build",
 ]
 
 [[package]]
