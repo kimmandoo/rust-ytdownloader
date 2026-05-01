@@ -225,9 +225,27 @@ input:focus {
   box-shadow: 0 0 0 3px rgba(74, 92, 130, 0.12);
 }
 
-.url-row {
+.url-list {
   display: grid;
   gap: 8px;
+}
+
+.url-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.url-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.url-remove {
+  min-width: 54px;
 }
 
 .support-note {
@@ -456,17 +474,15 @@ input:focus {
 }
 
 .error-banner {
-  position: absolute;
-  top: 18px;
-  left: 18px;
-  right: 18px;
-  z-index: 2;
   border: 1px solid #ffd6d2;
   border-radius: 10px;
   padding: 10px 12px;
   color: #b42318;
   background: #fff5f4;
   font-weight: 720;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .boot-panel {
@@ -530,7 +546,9 @@ input:focus {
 .queue-actions,
 .actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -664,6 +682,7 @@ input:focus {
 
 .progress-panel {
   align-self: end;
+  min-width: 0;
 }
 
 .progress-track {
@@ -739,5 +758,27 @@ input:focus {
   .workspace {
     grid-template-rows: auto;
     padding-top: 0;
+  }
+
+  .panel-head,
+  .queue-head,
+  .progress-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .queue-actions,
+  .actions {
+    justify-content: flex-start;
+  }
+
+  .url-row,
+  .url-actions,
+  .path-row {
+    grid-template-columns: 1fr;
+  }
+
+  .format-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

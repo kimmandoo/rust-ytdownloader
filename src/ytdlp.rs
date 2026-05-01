@@ -447,7 +447,8 @@ mod tests {
             .collect::<std::collections::HashMap<_, _>>();
 
         assert_eq!(
-            envs.get("PYTHONIOENCODING").and_then(|value| value.as_deref()),
+            envs.get("PYTHONIOENCODING")
+                .and_then(|value| value.as_deref()),
             Some("utf-8")
         );
         assert_eq!(
