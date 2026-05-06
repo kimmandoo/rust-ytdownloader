@@ -152,6 +152,21 @@ impl YtDlpCookieBrowser {
         }
     }
 
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::None => "the selected browser",
+            Self::Chrome => "Chrome",
+            Self::Edge => "Edge",
+            Self::Firefox => "Firefox",
+            Self::Brave => "Brave",
+            Self::Chromium => "Chromium",
+            Self::Opera => "Opera",
+            Self::Vivaldi => "Vivaldi",
+            Self::Safari => "Safari",
+            Self::Whale => "Whale",
+        }
+    }
+
     pub fn from_config_value(value: &str) -> Self {
         match value {
             "chrome" => Self::Chrome,
@@ -177,6 +192,19 @@ pub fn cookie_browser_args(browser: YtDlpCookieBrowser) -> Vec<String> {
             browser.as_config_value().to_string(),
         ]
     }
+}
+
+pub fn is_browser_cookie_database_copy_error(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("could not copy") && error.contains("cookie database")
+}
+
+pub fn browser_cookie_error_message(browser: YtDlpCookieBrowser) -> String {
+    format!(
+        "Browser cookies failed because {}'s cookie database is locked or unavailable. Close {} completely, or set Browser cookies to None and try again.",
+        browser.display_name(),
+        browser.display_name()
+    )
 }
 
 pub fn update_ytdlp_channel(ytdlp_path: &Path, channel: YtDlpChannel) -> YtDlpResult<String> {
@@ -513,6 +541,22 @@ mod tests {
             vec!["--cookies-from-browser".to_string(), "chrome".to_string()]
         );
         assert!(cookie_browser_args(YtDlpCookieBrowser::None).is_empty());
+    }
+
+    #[test]
+    fn detects_browser_cookie_database_copy_errors() {
+        let error = "ERROR: Could not copy Chrome cookie database. See https://github.com/yt-dlp/yt-dlp/issues/7271 for more info";
+
+        assert!(is_browser_cookie_database_copy_error(error));
+    }
+
+    #[test]
+    fn browser_cookie_error_message_names_browser_and_fallback() {
+        let message = browser_cookie_error_message(YtDlpCookieBrowser::Chrome);
+
+        assert!(message.contains("Chrome"));
+        assert!(message.contains("Browser cookies"));
+        assert!(message.contains("None"));
     }
 
     #[test]
