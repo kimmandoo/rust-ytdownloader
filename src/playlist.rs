@@ -118,28 +118,28 @@ pub fn fetch_playlist_info_with_channel(
     url: &str,
     ytdlp_channel: crate::ytdlp::YtDlpChannel,
 ) -> Result<PlaylistInfo, String> {
-    fetch_playlist_info_with_options(url, ytdlp_channel, crate::ytdlp::YtDlpCookieBrowser::None)
+    fetch_playlist_info_with_options(url, ytdlp_channel, crate::ytdlp::YtDlpCookieSource::None)
 }
 
 pub fn fetch_playlist_info_with_options(
     url: &str,
     ytdlp_channel: crate::ytdlp::YtDlpChannel,
-    cookie_browser: crate::ytdlp::YtDlpCookieBrowser,
+    cookie_source: crate::ytdlp::YtDlpCookieSource,
 ) -> Result<PlaylistInfo, String> {
-    fetch_playlist_info_with_retry(url, ytdlp_channel, cookie_browser, true)
+    fetch_playlist_info_with_retry(url, ytdlp_channel, cookie_source, true)
 }
 
 fn fetch_playlist_info_with_retry(
     url: &str,
     ytdlp_channel: crate::ytdlp::YtDlpChannel,
-    cookie_browser: crate::ytdlp::YtDlpCookieBrowser,
+    cookie_source: crate::ytdlp::YtDlpCookieSource,
     allow_nightly_retry: bool,
 ) -> Result<PlaylistInfo, String> {
     let ytdlp = get_ytdlp_path();
 
     let mut command = Command::new(&ytdlp);
     crate::ytdlp::configure_ytdlp_command(&mut command);
-    command.args(playlist_info_args(url, cookie_browser));
+    command.args(playlist_info_args(url, &cookie_source));
 
     #[cfg(target_os = "windows")]
     {
@@ -154,19 +154,16 @@ fn fetch_playlist_info_with_retry(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if should_retry_without_browser_cookies(cookie_browser, &stderr) {
+        if should_retry_without_browser_cookies(&cookie_source, &stderr) {
+            let cookie_browser = cookie_source.browser().unwrap_or_default();
             return fetch_playlist_info_with_retry(
                 url,
                 ytdlp_channel,
-                crate::ytdlp::YtDlpCookieBrowser::None,
+                crate::ytdlp::YtDlpCookieSource::None,
                 allow_nightly_retry,
             )
             .map_err(|fallback_error| {
-                format!(
-                    "{} Fallback without browser cookies also failed: {}",
-                    crate::ytdlp::browser_cookie_error_message(cookie_browser),
-                    fallback_error
-                )
+                format_cookie_fallback_error(cookie_browser, &stderr, &fallback_error)
             });
         }
         if allow_nightly_retry && crate::ytdlp::should_retry_after_channel_update(url, &stderr) {
@@ -175,7 +172,7 @@ fn fetch_playlist_info_with_retry(
                     return fetch_playlist_info_with_retry(
                         url,
                         ytdlp_channel,
-                        cookie_browser,
+                        cookie_source,
                         false,
                     );
                 }
@@ -298,11 +295,33 @@ fn resolve_entry_url(
 }
 
 fn should_retry_without_browser_cookies(
-    cookie_browser: crate::ytdlp::YtDlpCookieBrowser,
+    cookie_source: &crate::ytdlp::YtDlpCookieSource,
     stderr: &str,
 ) -> bool {
-    cookie_browser != crate::ytdlp::YtDlpCookieBrowser::None
+    matches!(cookie_source, crate::ytdlp::YtDlpCookieSource::Browser(_))
         && crate::ytdlp::is_browser_cookie_extraction_error(stderr)
+}
+
+fn format_cookie_fallback_error(
+    cookie_browser: crate::ytdlp::YtDlpCookieBrowser,
+    cookie_error: &str,
+    fallback_error: &str,
+) -> String {
+    let cookie_message =
+        crate::ytdlp::browser_cookie_error_message_for(cookie_browser, cookie_error);
+    if crate::ytdlp::is_auth_required_error(fallback_error) {
+        return format!(
+            "{} This video requires signed-in YouTube cookies, so the no-cookie fallback cannot analyze it. {} cookies could not be used. {}",
+            cookie_message,
+            cookie_browser.display_name(),
+            fallback_error
+        );
+    }
+
+    format!(
+        "{} Fallback without browser cookies also failed: {}",
+        cookie_message, fallback_error
+    )
 }
 
 fn is_absolute_http_url(value: &str) -> bool {
@@ -310,7 +329,7 @@ fn is_absolute_http_url(value: &str) -> bool {
     value.starts_with("https://") || value.starts_with("http://")
 }
 
-fn playlist_info_args(url: &str, cookie_browser: crate::ytdlp::YtDlpCookieBrowser) -> Vec<String> {
+fn playlist_info_args(url: &str, cookie_source: &crate::ytdlp::YtDlpCookieSource) -> Vec<String> {
     let mut args = vec![
         "--flat-playlist".to_string(),
         "-J".to_string(),
@@ -318,7 +337,7 @@ fn playlist_info_args(url: &str, cookie_browser: crate::ytdlp::YtDlpCookieBrowse
         "--socket-timeout".to_string(),
         crate::ytdlp::YTDLP_SOCKET_TIMEOUT_SECS.to_string(),
     ];
-    args.extend(crate::ytdlp::cookie_browser_args(cookie_browser));
+    args.extend(crate::ytdlp::cookie_source_args(cookie_source));
     args.extend(crate::ytdlp::js_runtime_args());
     args.push(url.to_string());
     args
@@ -497,7 +516,7 @@ mod tests {
     fn playlist_info_uses_30_second_socket_timeout() {
         let args = playlist_info_args(
             "https://youtu.be/example",
-            crate::ytdlp::YtDlpCookieBrowser::None,
+            &crate::ytdlp::YtDlpCookieSource::None,
         );
 
         assert!(
@@ -510,7 +529,7 @@ mod tests {
     fn playlist_info_can_load_browser_cookies() {
         let args = playlist_info_args(
             "https://youtu.be/age-gated",
-            crate::ytdlp::YtDlpCookieBrowser::Chrome,
+            &crate::ytdlp::YtDlpCookieSource::Browser(crate::ytdlp::YtDlpCookieBrowser::Chrome),
         );
 
         assert!(
@@ -520,11 +539,26 @@ mod tests {
     }
 
     #[test]
+    fn playlist_info_can_load_cookie_file() {
+        let args = playlist_info_args(
+            "https://youtu.be/age-gated",
+            &crate::ytdlp::YtDlpCookieSource::File(std::path::PathBuf::from(
+                "C:/cookies/youtube.txt",
+            )),
+        );
+
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--cookies", "C:/cookies/youtube.txt"])
+        );
+    }
+
+    #[test]
     fn browser_cookie_database_copy_errors_retry_without_browser_cookies() {
         let stderr = "ERROR: Could not copy Chrome cookie database.";
 
         assert!(should_retry_without_browser_cookies(
-            crate::ytdlp::YtDlpCookieBrowser::Chrome,
+            &crate::ytdlp::YtDlpCookieSource::Browser(crate::ytdlp::YtDlpCookieBrowser::Chrome),
             stderr
         ));
     }
@@ -534,7 +568,7 @@ mod tests {
         let stderr = "ERROR: Failed to decrypt with DPAPI.";
 
         assert!(should_retry_without_browser_cookies(
-            crate::ytdlp::YtDlpCookieBrowser::Chrome,
+            &crate::ytdlp::YtDlpCookieSource::Browser(crate::ytdlp::YtDlpCookieBrowser::Chrome),
             stderr
         ));
     }
@@ -544,9 +578,22 @@ mod tests {
         let stderr = "ERROR: Could not copy Chrome cookie database.";
 
         assert!(!should_retry_without_browser_cookies(
-            crate::ytdlp::YtDlpCookieBrowser::None,
+            &crate::ytdlp::YtDlpCookieSource::None,
             stderr
         ));
+    }
+
+    #[test]
+    fn age_gate_fallback_failure_explains_that_signed_in_cookies_are_required() {
+        let message = format_cookie_fallback_error(
+            crate::ytdlp::YtDlpCookieBrowser::Chrome,
+            "ERROR: Failed to decrypt with DPAPI.",
+            "영상 정보를 가져올 수 없습니다: ERROR: [youtube] X7IPGX7er_0: Sign in to confirm your age. Use --cookies-from-browser or --cookies for the authentication.",
+        );
+
+        assert!(message.contains("requires signed-in YouTube cookies"));
+        assert!(message.contains("Chrome cookies could not be used"));
+        assert!(message.contains("DPAPI"));
     }
 
     #[test]

@@ -183,6 +183,34 @@ impl YtDlpCookieBrowser {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum YtDlpCookieSource {
+    None,
+    Browser(YtDlpCookieBrowser),
+    File(PathBuf),
+}
+
+impl YtDlpCookieSource {
+    pub fn from_settings(browser: YtDlpCookieBrowser, cookie_file: Option<PathBuf>) -> Self {
+        if let Some(path) = cookie_file.filter(|path| !path.as_os_str().is_empty()) {
+            return Self::File(path);
+        }
+
+        if browser == YtDlpCookieBrowser::None {
+            Self::None
+        } else {
+            Self::Browser(browser)
+        }
+    }
+
+    pub fn browser(&self) -> Option<YtDlpCookieBrowser> {
+        match self {
+            Self::Browser(browser) => Some(*browser),
+            Self::None | Self::File(_) => None,
+        }
+    }
+}
+
 pub fn cookie_browser_args(browser: YtDlpCookieBrowser) -> Vec<String> {
     if browser == YtDlpCookieBrowser::None {
         Vec::new()
@@ -191,6 +219,16 @@ pub fn cookie_browser_args(browser: YtDlpCookieBrowser) -> Vec<String> {
             "--cookies-from-browser".to_string(),
             browser.as_config_value().to_string(),
         ]
+    }
+}
+
+pub fn cookie_source_args(source: &YtDlpCookieSource) -> Vec<String> {
+    match source {
+        YtDlpCookieSource::None => Vec::new(),
+        YtDlpCookieSource::Browser(browser) => cookie_browser_args(*browser),
+        YtDlpCookieSource::File(path) => {
+            vec!["--cookies".to_string(), path.to_string_lossy().to_string()]
+        }
     }
 }
 
@@ -205,12 +243,41 @@ pub fn is_browser_cookie_extraction_error(error: &str) -> bool {
         || (error.contains("failed to decrypt") && error.contains("dpapi"))
 }
 
+pub fn is_auth_required_error(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("sign in to confirm your age")
+        || error.contains("use --cookies-from-browser or --cookies for the authentication")
+}
+
 pub fn browser_cookie_error_message(browser: YtDlpCookieBrowser) -> String {
     format!(
         "Browser cookies failed because {}'s cookie database is locked or unavailable. Close {} completely, or set Browser cookies to None and try again.",
         browser.display_name(),
         browser.display_name()
     )
+}
+
+pub fn browser_cookie_error_message_for(
+    browser: YtDlpCookieBrowser,
+    extraction_error: &str,
+) -> String {
+    let lowered = extraction_error.to_ascii_lowercase();
+    if lowered.contains("failed to decrypt") && lowered.contains("dpapi") {
+        return format!(
+            "{} cookies could not be decrypted by Windows DPAPI. Run this app as the same Windows user that Chrome uses and not as administrator, or try another logged-in browser.",
+            browser.display_name()
+        );
+    }
+
+    if is_browser_cookie_database_copy_error(extraction_error) {
+        return format!(
+            "{} cookie database could not be copied. Close every {} window and background process, then try again.",
+            browser.display_name(),
+            browser.display_name()
+        );
+    }
+
+    browser_cookie_error_message(browser)
 }
 
 pub fn update_ytdlp_channel(ytdlp_path: &Path, channel: YtDlpChannel) -> YtDlpResult<String> {
@@ -550,6 +617,32 @@ mod tests {
     }
 
     #[test]
+    fn cookie_file_source_uses_ytdlp_cookies_argument() {
+        let source = YtDlpCookieSource::File(PathBuf::from("C:/cookies/youtube.txt"));
+
+        assert_eq!(
+            cookie_source_args(&source),
+            vec![
+                "--cookies".to_string(),
+                "C:/cookies/youtube.txt".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn cookie_source_prefers_file_over_browser() {
+        let source = YtDlpCookieSource::from_settings(
+            YtDlpCookieBrowser::Chrome,
+            Some(PathBuf::from("C:/cookies/youtube.txt")),
+        );
+
+        assert_eq!(
+            source,
+            YtDlpCookieSource::File(PathBuf::from("C:/cookies/youtube.txt"))
+        );
+    }
+
+    #[test]
     fn detects_browser_cookie_database_copy_errors() {
         let error = "ERROR: Could not copy Chrome cookie database. See https://github.com/yt-dlp/yt-dlp/issues/7271 for more info";
 
@@ -561,6 +654,25 @@ mod tests {
         let error = "ERROR: Failed to decrypt with DPAPI. See https://github.com/yt-dlp/yt-dlp/issues/10927 for more info";
 
         assert!(is_browser_cookie_extraction_error(error));
+    }
+
+    #[test]
+    fn detects_youtube_age_confirmation_auth_errors() {
+        let error = "ERROR: [youtube] X7IPGX7er_0: Sign in to confirm your age. This video may be inappropriate for some users. Use --cookies-from-browser or --cookies for the authentication.";
+
+        assert!(is_auth_required_error(error));
+    }
+
+    #[test]
+    fn dpapi_cookie_error_message_names_windows_decryption() {
+        let message = browser_cookie_error_message_for(
+            YtDlpCookieBrowser::Chrome,
+            "ERROR: Failed to decrypt with DPAPI.",
+        );
+
+        assert!(message.contains("DPAPI"));
+        assert!(message.contains("same Windows user"));
+        assert!(message.contains("not as administrator"));
     }
 
     #[test]

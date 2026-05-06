@@ -15,6 +15,8 @@ pub struct AppConfig {
     pub ytdlp_channel: String,
     #[serde(default = "default_ytdlp_cookie_browser")]
     pub ytdlp_cookie_browser: String,
+    #[serde(default)]
+    pub ytdlp_cookie_file: Option<PathBuf>,
 }
 
 fn default_language() -> String {
@@ -40,6 +42,7 @@ impl Default for AppConfig {
             language: "auto".to_string(),
             ytdlp_channel: default_ytdlp_channel(),
             ytdlp_cookie_browser: default_ytdlp_cookie_browser(),
+            ytdlp_cookie_file: None,
         }
     }
 }
@@ -108,6 +111,13 @@ impl AppConfig {
     pub fn ytdlp_cookie_browser(&self) -> crate::ytdlp::YtDlpCookieBrowser {
         crate::ytdlp::YtDlpCookieBrowser::from_config_value(&self.ytdlp_cookie_browser)
     }
+
+    pub fn ytdlp_cookie_source(&self) -> crate::ytdlp::YtDlpCookieSource {
+        crate::ytdlp::YtDlpCookieSource::from_settings(
+            self.ytdlp_cookie_browser(),
+            self.ytdlp_cookie_file.clone(),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -131,5 +141,19 @@ mod tests {
         };
 
         assert_eq!(config.ytdlp_cookie_browser(), YtDlpCookieBrowser::Chrome);
+    }
+
+    #[test]
+    fn cookie_file_config_overrides_browser_cookie_source() {
+        let config = AppConfig {
+            ytdlp_cookie_browser: "chrome".to_string(),
+            ytdlp_cookie_file: Some(PathBuf::from("C:/cookies/youtube.txt")),
+            ..AppConfig::default()
+        };
+
+        assert_eq!(
+            config.ytdlp_cookie_source(),
+            crate::ytdlp::YtDlpCookieSource::File(PathBuf::from("C:/cookies/youtube.txt"))
+        );
     }
 }

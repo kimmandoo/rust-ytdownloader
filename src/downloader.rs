@@ -24,7 +24,7 @@ pub struct DownloadConfig {
     pub format: DownloadFormat,
     pub audio_quality: String,
     pub output_dir: PathBuf,
-    pub cookie_browser: crate::ytdlp::YtDlpCookieBrowser,
+    pub cookie_source: crate::ytdlp::YtDlpCookieSource,
 }
 
 #[derive(Debug, Clone)]
@@ -340,7 +340,7 @@ fn send_ytdlp_message(tx: &Sender<DownloadStatus>, line: &str) {
 }
 
 fn add_download_cookie_args(args: &mut Vec<String>, config: &DownloadConfig) {
-    args.extend(crate::ytdlp::cookie_browser_args(config.cookie_browser));
+    args.extend(crate::ytdlp::cookie_source_args(&config.cookie_source));
 }
 
 fn read_process_lines_lossy<R, F>(mut reader: R, mut on_line: F)
@@ -661,7 +661,7 @@ mod tests {
             format: DownloadFormat::Mp3,
             audio_quality: "320K".to_string(),
             output_dir: PathBuf::from("C:/Music"),
-            cookie_browser: YtDlpCookieBrowser::Chrome,
+            cookie_source: crate::ytdlp::YtDlpCookieSource::Browser(YtDlpCookieBrowser::Chrome),
         };
 
         let mut args = Vec::new();
@@ -670,6 +670,27 @@ mod tests {
         assert!(
             args.windows(2)
                 .any(|pair| pair == ["--cookies-from-browser", "chrome"])
+        );
+    }
+
+    #[test]
+    fn download_args_can_load_cookie_file() {
+        let config = DownloadConfig {
+            url: "https://www.youtube.com/watch?v=age-gated".to_string(),
+            format: DownloadFormat::Mp3,
+            audio_quality: "320K".to_string(),
+            output_dir: PathBuf::from("C:/Music"),
+            cookie_source: crate::ytdlp::YtDlpCookieSource::File(PathBuf::from(
+                "C:/cookies/youtube.txt",
+            )),
+        };
+
+        let mut args = Vec::new();
+        add_download_cookie_args(&mut args, &config);
+
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--cookies", "C:/cookies/youtube.txt"])
         );
     }
 }

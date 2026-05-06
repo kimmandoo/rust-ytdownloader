@@ -17,6 +17,7 @@ type Settings = {
   audio_quality: string;
   ytdlp_channel: string;
   ytdlp_cookie_browser: string;
+  ytdlp_cookie_file: string | null;
 };
 
 type InitEvent = {
@@ -84,6 +85,7 @@ let settings: Settings = {
   audio_quality: "320K",
   ytdlp_channel: "stable",
   ytdlp_cookie_browser: "none",
+  ytdlp_cookie_file: null,
 };
 let urlRowCounter = 1;
 let urlRows: UrlRow[] = [createUrlRow()];
@@ -269,6 +271,21 @@ async function chooseFolder() {
   }
 }
 
+async function chooseCookieFile() {
+  if (!isTauriRuntime) {
+    await persistSettings({ ytdlp_cookie_file: "C:\\Users\\USER\\Downloads\\cookies.txt" });
+    return;
+  }
+  const path = await invoke<string | null>("choose_cookie_file");
+  if (path) {
+    await persistSettings({ ytdlp_cookie_file: path });
+  }
+}
+
+async function clearCookieFile() {
+  await persistSettings({ ytdlp_cookie_file: null });
+}
+
 async function analyze() {
   const rowsToAnalyze = nonEmptyUrlRows(urlRows);
   if (rowsToAnalyze.length === 0) {
@@ -297,6 +314,7 @@ async function analyze() {
             url: row.value,
             ytdlpChannel: settings.ytdlp_channel,
             ytdlpCookieBrowser: settings.ytdlp_cookie_browser,
+            ytdlpCookieFile: settings.ytdlp_cookie_file,
           })
         : await previewAnalyze(row.value, index);
       successful.push(info);
@@ -363,6 +381,7 @@ async function startDownload() {
       format: settings.format,
       outputDir: settings.download_dir,
       ytdlpCookieBrowser: settings.ytdlp_cookie_browser,
+      ytdlpCookieFile: settings.ytdlp_cookie_file,
     });
     window.setTimeout(() => {
       if (phase === "downloading" && downloadEventCount === 0) {
@@ -524,6 +543,16 @@ function render() {
             ${cookieBrowsers.map((browser) => `<option value="${browser.value}" ${browser.value === settings.ytdlp_cookie_browser ? "selected" : ""}>${browser.label}</option>`).join("")}
           </select>
         </label>
+
+        <section class="panel">
+          <div class="path-row cookie-file-row">
+            <span>Cookies file</span>
+            <strong title="${escapeHtml(settings.ytdlp_cookie_file ?? "")}">${settings.ytdlp_cookie_file ? escapeHtml(settings.ytdlp_cookie_file) : "No cookies.txt selected"}</strong>
+            <button class="ghost-button" id="chooseCookieFile">Select</button>
+            <button class="tiny-button" id="clearCookieFile" ${settings.ytdlp_cookie_file ? "" : "disabled"}>Clear</button>
+          </div>
+          <p class="support-note">cookies.txt is used before browser cookies.</p>
+        </section>
       </aside>
 
       <section class="workspace">
@@ -729,6 +758,12 @@ function bindEvents() {
   document
     .querySelector<HTMLButtonElement>("#chooseFolder")
     ?.addEventListener("click", chooseFolder);
+  document
+    .querySelector<HTMLButtonElement>("#chooseCookieFile")
+    ?.addEventListener("click", chooseCookieFile);
+  document
+    .querySelector<HTMLButtonElement>("#clearCookieFile")
+    ?.addEventListener("click", clearCookieFile);
   document
     .querySelector<HTMLButtonElement>("#analyzeButton")
     ?.addEventListener("click", analyze);

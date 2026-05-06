@@ -6,6 +6,7 @@ use rust_yt::initializer::{init_dependencies, InitStatus};
 use rust_yt::playlist::{fetch_playlist_info_with_options, get_ytdlp_path, PlaylistInfo, VideoEntry};
 use rust_yt::ytdlp::{
     supported_sites as load_supported_sites, SupportedSites, YtDlpChannel, YtDlpCookieBrowser,
+    YtDlpCookieSource,
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -31,6 +32,7 @@ struct SettingsDto {
     audio_quality: String,
     ytdlp_channel: String,
     ytdlp_cookie_browser: String,
+    ytdlp_cookie_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -58,6 +60,7 @@ fn main() {
             get_settings,
             save_settings,
             choose_folder,
+            choose_cookie_file,
             initialize,
             analyze_url,
             supported_sites,
@@ -85,6 +88,14 @@ fn save_settings(settings: SettingsDto) -> Result<SettingsDto, String> {
 fn choose_folder() -> Option<String> {
     rfd::FileDialog::new()
         .pick_folder()
+        .map(|path| path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn choose_cookie_file() -> Option<String> {
+    rfd::FileDialog::new()
+        .add_filter("Cookies", &["txt"])
+        .pick_file()
         .map(|path| path.to_string_lossy().to_string())
 }
 
@@ -140,12 +151,14 @@ async fn analyze_url(
     url: String,
     ytdlp_channel: String,
     ytdlp_cookie_browser: String,
+    ytdlp_cookie_file: Option<String>,
 ) -> Result<PlaylistInfo, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let cookie_source = cookie_source_from_settings(&ytdlp_cookie_browser, ytdlp_cookie_file);
         fetch_playlist_info_with_options(
             &url,
             YtDlpChannel::from_config_value(&ytdlp_channel),
-            YtDlpCookieBrowser::from_config_value(&ytdlp_cookie_browser),
+            cookie_source,
         )
     })
     .await
@@ -167,6 +180,7 @@ fn start_download(
     format: String,
     output_dir: String,
     ytdlp_cookie_browser: String,
+    ytdlp_cookie_file: Option<String>,
 ) -> Result<(), String> {
     let selected_entries: Vec<VideoEntry> =
         entries.into_iter().filter(|entry| entry.selected).collect();
@@ -184,7 +198,7 @@ fn start_download(
     let stop_tx_slot = state.stop_tx.clone();
 
     let total = selected_entries.len();
-    let cookie_browser = YtDlpCookieBrowser::from_config_value(&ytdlp_cookie_browser);
+    let cookie_source = cookie_source_from_settings(&ytdlp_cookie_browser, ytdlp_cookie_file);
     let first_title = selected_entries
         .first()
         .map(|entry| entry.title.clone())
@@ -233,7 +247,7 @@ fn start_download(
                 format: string_to_format(&format),
                 audio_quality: "320K".to_string(),
                 output_dir: output_dir.clone(),
-                cookie_browser,
+                cookie_source: cookie_source.clone(),
             };
             if let Ok(mut guard) = stop_tx_slot.lock() {
                 *guard = Some(stop_tx);
@@ -381,6 +395,9 @@ impl SettingsDto {
             audio_quality: config.audio_quality,
             ytdlp_channel: config.ytdlp_channel,
             ytdlp_cookie_browser: config.ytdlp_cookie_browser,
+            ytdlp_cookie_file: config
+                .ytdlp_cookie_file
+                .map(|path| path.to_string_lossy().to_string()),
         }
     }
 
@@ -392,8 +409,21 @@ impl SettingsDto {
             language: "ko".to_string(),
             ytdlp_channel: self.ytdlp_channel.clone(),
             ytdlp_cookie_browser: self.ytdlp_cookie_browser.clone(),
+            ytdlp_cookie_file: self.ytdlp_cookie_file.as_ref().map(PathBuf::from),
         }
     }
+}
+
+fn cookie_source_from_settings(
+    ytdlp_cookie_browser: &str,
+    ytdlp_cookie_file: Option<String>,
+) -> YtDlpCookieSource {
+    YtDlpCookieSource::from_settings(
+        YtDlpCookieBrowser::from_config_value(ytdlp_cookie_browser),
+        ytdlp_cookie_file
+            .filter(|path| !path.trim().is_empty())
+            .map(PathBuf::from),
+    )
 }
 
 fn string_to_format(format: &str) -> DownloadFormat {

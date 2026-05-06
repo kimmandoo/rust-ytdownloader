@@ -346,6 +346,10 @@ input:focus {
   align-items: center;
 }
 
+.cookie-file-row {
+  grid-template-columns: 1fr auto auto;
+}
+
 .path-row span {
   grid-column: 1 / -1;
   color: var(--muted);
@@ -774,7 +778,8 @@ input:focus {
 
   .url-row,
   .url-actions,
-  .path-row {
+  .path-row,
+  .cookie-file-row {
     grid-template-columns: 1fr;
   }
 
