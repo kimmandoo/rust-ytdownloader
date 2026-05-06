@@ -328,6 +328,7 @@ impl MyApp {
             url: video.url.clone(),
             format: self.format.clone(),
             audio_quality: "320K".to_string(),
+            cookie_browser: rust_yt::ytdlp::YtDlpCookieBrowser::None,
             output_dir: self.download_dir.clone(), // 선택한 저장 경로 사용
         };
 
@@ -369,6 +370,9 @@ impl MyApp {
             audio_quality: "320K".to_string(),
             language: rust_i18n::locale().to_string(),
             ytdlp_channel: self.ytdlp_channel.as_str().to_string(),
+            ytdlp_cookie_browser: rust_yt::ytdlp::YtDlpCookieBrowser::None
+                .as_config_value()
+                .to_string(),
         };
         let _ = config.save();
     }

@@ -16,6 +16,7 @@ type Settings = {
   format: DownloadFormat;
   audio_quality: string;
   ytdlp_channel: string;
+  ytdlp_cookie_browser: string;
 };
 
 type InitEvent = {
@@ -64,12 +65,25 @@ const formats: Array<{ value: DownloadFormat; label: string; tone: string }> = [
 ];
 
 const channels = ["stable", "nightly", "master"];
+const cookieBrowsers = [
+  { value: "none", label: "Off" },
+  { value: "chrome", label: "Chrome" },
+  { value: "edge", label: "Edge" },
+  { value: "firefox", label: "Firefox" },
+  { value: "brave", label: "Brave" },
+  { value: "chromium", label: "Chromium" },
+  { value: "opera", label: "Opera" },
+  { value: "vivaldi", label: "Vivaldi" },
+  { value: "safari", label: "Safari" },
+  { value: "whale", label: "Whale" },
+];
 
 let settings: Settings = {
   download_dir: null,
   format: "mp3",
   audio_quality: "320K",
   ytdlp_channel: "stable",
+  ytdlp_cookie_browser: "none",
 };
 let urlRowCounter = 1;
 let urlRows: UrlRow[] = [createUrlRow()];
@@ -282,6 +296,7 @@ async function analyze() {
         ? await invoke<PlaylistInfo>("analyze_url", {
             url: row.value,
             ytdlpChannel: settings.ytdlp_channel,
+            ytdlpCookieBrowser: settings.ytdlp_cookie_browser,
           })
         : await previewAnalyze(row.value, index);
       successful.push(info);
@@ -347,6 +362,7 @@ async function startDownload() {
       entries,
       format: settings.format,
       outputDir: settings.download_dir,
+      ytdlpCookieBrowser: settings.ytdlp_cookie_browser,
     });
     window.setTimeout(() => {
       if (phase === "downloading" && downloadEventCount === 0) {
@@ -499,6 +515,13 @@ function render() {
           <span>yt-dlp 채널</span>
           <select id="channelSelect">
             ${channels.map((channel) => `<option value="${channel}" ${channel === settings.ytdlp_channel ? "selected" : ""}>${channel}</option>`).join("")}
+          </select>
+        </label>
+
+        <label class="channel-picker panel">
+          <span>Browser cookies</span>
+          <select id="cookieBrowserSelect">
+            ${cookieBrowsers.map((browser) => `<option value="${browser.value}" ${browser.value === settings.ytdlp_cookie_browser ? "selected" : ""}>${browser.label}</option>`).join("")}
           </select>
         </label>
       </aside>
@@ -750,6 +773,13 @@ function bindEvents() {
     ?.addEventListener("change", (event) => {
       persistSettings({
         ytdlp_channel: (event.target as HTMLSelectElement).value,
+      });
+    });
+  document
+    .querySelector<HTMLSelectElement>("#cookieBrowserSelect")
+    ?.addEventListener("change", (event) => {
+      persistSettings({
+        ytdlp_cookie_browser: (event.target as HTMLSelectElement).value,
       });
     });
   document.querySelectorAll<HTMLButtonElement>("[data-format]").forEach((button) => {
