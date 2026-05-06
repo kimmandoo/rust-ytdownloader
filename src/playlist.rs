@@ -154,6 +154,21 @@ fn fetch_playlist_info_with_retry(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        if should_retry_without_browser_cookies(cookie_browser, &stderr) {
+            return fetch_playlist_info_with_retry(
+                url,
+                ytdlp_channel,
+                crate::ytdlp::YtDlpCookieBrowser::None,
+                allow_nightly_retry,
+            )
+            .map_err(|fallback_error| {
+                format!(
+                    "{} Fallback without browser cookies also failed: {}",
+                    crate::ytdlp::browser_cookie_error_message(cookie_browser),
+                    fallback_error
+                )
+            });
+        }
         if allow_nightly_retry && crate::ytdlp::should_retry_after_channel_update(url, &stderr) {
             match crate::ytdlp::update_ytdlp_channel(&ytdlp, ytdlp_channel) {
                 Ok(_) => {
@@ -280,6 +295,14 @@ fn resolve_entry_url(
     }
 
     None
+}
+
+fn should_retry_without_browser_cookies(
+    cookie_browser: crate::ytdlp::YtDlpCookieBrowser,
+    stderr: &str,
+) -> bool {
+    cookie_browser != crate::ytdlp::YtDlpCookieBrowser::None
+        && crate::ytdlp::is_browser_cookie_database_copy_error(stderr)
 }
 
 fn is_absolute_http_url(value: &str) -> bool {
@@ -494,6 +517,26 @@ mod tests {
             args.windows(2)
                 .any(|pair| pair == ["--cookies-from-browser", "chrome"])
         );
+    }
+
+    #[test]
+    fn browser_cookie_database_copy_errors_retry_without_browser_cookies() {
+        let stderr = "ERROR: Could not copy Chrome cookie database.";
+
+        assert!(should_retry_without_browser_cookies(
+            crate::ytdlp::YtDlpCookieBrowser::Chrome,
+            stderr
+        ));
+    }
+
+    #[test]
+    fn browser_cookie_database_copy_errors_do_not_retry_when_cookies_are_disabled() {
+        let stderr = "ERROR: Could not copy Chrome cookie database.";
+
+        assert!(!should_retry_without_browser_cookies(
+            crate::ytdlp::YtDlpCookieBrowser::None,
+            stderr
+        ));
     }
 
     #[test]
