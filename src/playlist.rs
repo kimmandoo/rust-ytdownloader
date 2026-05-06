@@ -302,7 +302,7 @@ fn should_retry_without_browser_cookies(
     stderr: &str,
 ) -> bool {
     cookie_browser != crate::ytdlp::YtDlpCookieBrowser::None
-        && crate::ytdlp::is_browser_cookie_database_copy_error(stderr)
+        && crate::ytdlp::is_browser_cookie_extraction_error(stderr)
 }
 
 fn is_absolute_http_url(value: &str) -> bool {
@@ -522,6 +522,16 @@ mod tests {
     #[test]
     fn browser_cookie_database_copy_errors_retry_without_browser_cookies() {
         let stderr = "ERROR: Could not copy Chrome cookie database.";
+
+        assert!(should_retry_without_browser_cookies(
+            crate::ytdlp::YtDlpCookieBrowser::Chrome,
+            stderr
+        ));
+    }
+
+    #[test]
+    fn browser_cookie_dpapi_errors_retry_without_browser_cookies() {
+        let stderr = "ERROR: Failed to decrypt with DPAPI.";
 
         assert!(should_retry_without_browser_cookies(
             crate::ytdlp::YtDlpCookieBrowser::Chrome,

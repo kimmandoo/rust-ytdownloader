@@ -199,6 +199,12 @@ pub fn is_browser_cookie_database_copy_error(error: &str) -> bool {
     error.contains("could not copy") && error.contains("cookie database")
 }
 
+pub fn is_browser_cookie_extraction_error(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    is_browser_cookie_database_copy_error(&error)
+        || (error.contains("failed to decrypt") && error.contains("dpapi"))
+}
+
 pub fn browser_cookie_error_message(browser: YtDlpCookieBrowser) -> String {
     format!(
         "Browser cookies failed because {}'s cookie database is locked or unavailable. Close {} completely, or set Browser cookies to None and try again.",
@@ -548,6 +554,13 @@ mod tests {
         let error = "ERROR: Could not copy Chrome cookie database. See https://github.com/yt-dlp/yt-dlp/issues/7271 for more info";
 
         assert!(is_browser_cookie_database_copy_error(error));
+    }
+
+    #[test]
+    fn detects_browser_cookie_dpapi_decrypt_errors() {
+        let error = "ERROR: Failed to decrypt with DPAPI. See https://github.com/yt-dlp/yt-dlp/issues/10927 for more info";
+
+        assert!(is_browser_cookie_extraction_error(error));
     }
 
     #[test]
