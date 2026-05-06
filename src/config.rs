@@ -13,6 +13,8 @@ pub struct AppConfig {
     pub language: String,
     #[serde(default = "default_ytdlp_channel")]
     pub ytdlp_channel: String,
+    #[serde(default = "default_ytdlp_cookie_browser")]
+    pub ytdlp_cookie_browser: String,
 }
 
 fn default_language() -> String {
@@ -23,6 +25,12 @@ fn default_ytdlp_channel() -> String {
     YtDlpChannel::default().as_str().to_string()
 }
 
+fn default_ytdlp_cookie_browser() -> String {
+    crate::ytdlp::YtDlpCookieBrowser::default()
+        .as_config_value()
+        .to_string()
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -31,6 +39,7 @@ impl Default for AppConfig {
             audio_quality: "320K".to_string(),
             language: "auto".to_string(),
             ytdlp_channel: default_ytdlp_channel(),
+            ytdlp_cookie_browser: default_ytdlp_cookie_browser(),
         }
     }
 }
@@ -94,5 +103,33 @@ impl AppConfig {
 
     pub fn ytdlp_channel(&self) -> YtDlpChannel {
         YtDlpChannel::from_config_value(&self.ytdlp_channel)
+    }
+
+    pub fn ytdlp_cookie_browser(&self) -> crate::ytdlp::YtDlpCookieBrowser {
+        crate::ytdlp::YtDlpCookieBrowser::from_config_value(&self.ytdlp_cookie_browser)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ytdlp::YtDlpCookieBrowser;
+
+    #[test]
+    fn default_config_disables_browser_cookies() {
+        assert_eq!(
+            AppConfig::default().ytdlp_cookie_browser(),
+            YtDlpCookieBrowser::None
+        );
+    }
+
+    #[test]
+    fn cookie_browser_config_parses_known_browser() {
+        let config = AppConfig {
+            ytdlp_cookie_browser: "chrome".to_string(),
+            ..AppConfig::default()
+        };
+
+        assert_eq!(config.ytdlp_cookie_browser(), YtDlpCookieBrowser::Chrome);
     }
 }

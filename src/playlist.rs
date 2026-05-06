@@ -118,19 +118,28 @@ pub fn fetch_playlist_info_with_channel(
     url: &str,
     ytdlp_channel: crate::ytdlp::YtDlpChannel,
 ) -> Result<PlaylistInfo, String> {
-    fetch_playlist_info_with_retry(url, ytdlp_channel, true)
+    fetch_playlist_info_with_options(url, ytdlp_channel, crate::ytdlp::YtDlpCookieBrowser::None)
+}
+
+pub fn fetch_playlist_info_with_options(
+    url: &str,
+    ytdlp_channel: crate::ytdlp::YtDlpChannel,
+    cookie_browser: crate::ytdlp::YtDlpCookieBrowser,
+) -> Result<PlaylistInfo, String> {
+    fetch_playlist_info_with_retry(url, ytdlp_channel, cookie_browser, true)
 }
 
 fn fetch_playlist_info_with_retry(
     url: &str,
     ytdlp_channel: crate::ytdlp::YtDlpChannel,
+    cookie_browser: crate::ytdlp::YtDlpCookieBrowser,
     allow_nightly_retry: bool,
 ) -> Result<PlaylistInfo, String> {
     let ytdlp = get_ytdlp_path();
 
     let mut command = Command::new(&ytdlp);
     crate::ytdlp::configure_ytdlp_command(&mut command);
-    command.args(playlist_info_args(url));
+    command.args(playlist_info_args(url, cookie_browser));
 
     #[cfg(target_os = "windows")]
     {
@@ -147,7 +156,14 @@ fn fetch_playlist_info_with_retry(
         let stderr = String::from_utf8_lossy(&output.stderr);
         if allow_nightly_retry && crate::ytdlp::should_retry_after_channel_update(url, &stderr) {
             match crate::ytdlp::update_ytdlp_channel(&ytdlp, ytdlp_channel) {
-                Ok(_) => return fetch_playlist_info_with_retry(url, ytdlp_channel, false),
+                Ok(_) => {
+                    return fetch_playlist_info_with_retry(
+                        url,
+                        ytdlp_channel,
+                        cookie_browser,
+                        false,
+                    );
+                }
                 Err(update_error) => {
                     return Err(format!(
                         "Failed to fetch video info: {} | {} update failed: {}",
@@ -271,7 +287,7 @@ fn is_absolute_http_url(value: &str) -> bool {
     value.starts_with("https://") || value.starts_with("http://")
 }
 
-fn playlist_info_args(url: &str) -> Vec<String> {
+fn playlist_info_args(url: &str, cookie_browser: crate::ytdlp::YtDlpCookieBrowser) -> Vec<String> {
     let mut args = vec![
         "--flat-playlist".to_string(),
         "-J".to_string(),
@@ -279,6 +295,7 @@ fn playlist_info_args(url: &str) -> Vec<String> {
         "--socket-timeout".to_string(),
         crate::ytdlp::YTDLP_SOCKET_TIMEOUT_SECS.to_string(),
     ];
+    args.extend(crate::ytdlp::cookie_browser_args(cookie_browser));
     args.extend(crate::ytdlp::js_runtime_args());
     args.push(url.to_string());
     args
@@ -455,11 +472,27 @@ mod tests {
 
     #[test]
     fn playlist_info_uses_30_second_socket_timeout() {
-        let args = playlist_info_args("https://youtu.be/example");
+        let args = playlist_info_args(
+            "https://youtu.be/example",
+            crate::ytdlp::YtDlpCookieBrowser::None,
+        );
 
         assert!(
             args.windows(2)
                 .any(|pair| pair == ["--socket-timeout", "30"])
+        );
+    }
+
+    #[test]
+    fn playlist_info_can_load_browser_cookies() {
+        let args = playlist_info_args(
+            "https://youtu.be/age-gated",
+            crate::ytdlp::YtDlpCookieBrowser::Chrome,
+        );
+
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--cookies-from-browser", "chrome"])
         );
     }
 

@@ -24,6 +24,7 @@ pub struct DownloadConfig {
     pub format: DownloadFormat,
     pub audio_quality: String,
     pub output_dir: PathBuf,
+    pub cookie_browser: crate::ytdlp::YtDlpCookieBrowser,
 }
 
 #[derive(Debug, Clone)]
@@ -93,6 +94,7 @@ pub fn download_video(
         "-o".to_string(),
         output_str,
     ];
+    add_download_cookie_args(&mut args, &config);
     args.extend(crate::ytdlp::js_runtime_args());
 
     match &config.format {
@@ -335,6 +337,10 @@ fn send_ytdlp_message(tx: &Sender<DownloadStatus>, line: &str) {
             let _ = tx.send(DownloadStatus::Message(line.to_string()));
         }
     }
+}
+
+fn add_download_cookie_args(args: &mut Vec<String>, config: &DownloadConfig) {
+    args.extend(crate::ytdlp::cookie_browser_args(config.cookie_browser));
 }
 
 fn read_process_lines_lossy<R, F>(mut reader: R, mut on_line: F)
@@ -606,8 +612,13 @@ fn sanitize_filename(filename: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_ytdlp_progress, read_process_lines_lossy};
+    use super::{
+        DownloadConfig, add_download_cookie_args, parse_ytdlp_progress, read_process_lines_lossy,
+    };
+    use crate::downloader::DownloadFormat;
+    use crate::ytdlp::YtDlpCookieBrowser;
     use std::io::{BufReader, Cursor};
+    use std::path::PathBuf;
 
     #[test]
     fn parses_ytdlp_progress_line() {
@@ -640,6 +651,25 @@ mod tests {
         assert_eq!(
             parse_ytdlp_progress(&lines[1]),
             Some((42.7, "1.25MiB/s".to_string()))
+        );
+    }
+
+    #[test]
+    fn download_args_can_load_browser_cookies() {
+        let config = DownloadConfig {
+            url: "https://www.youtube.com/watch?v=age-gated".to_string(),
+            format: DownloadFormat::Mp3,
+            audio_quality: "320K".to_string(),
+            output_dir: PathBuf::from("C:/Music"),
+            cookie_browser: YtDlpCookieBrowser::Chrome,
+        };
+
+        let mut args = Vec::new();
+        add_download_cookie_args(&mut args, &config);
+
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--cookies-from-browser", "chrome"])
         );
     }
 }

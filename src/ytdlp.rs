@@ -108,6 +108,77 @@ impl YtDlpChannel {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum YtDlpCookieBrowser {
+    #[default]
+    None,
+    Chrome,
+    Edge,
+    Firefox,
+    Brave,
+    Chromium,
+    Opera,
+    Vivaldi,
+    Safari,
+    Whale,
+}
+
+impl YtDlpCookieBrowser {
+    pub const ALL: [Self; 10] = [
+        Self::None,
+        Self::Chrome,
+        Self::Edge,
+        Self::Firefox,
+        Self::Brave,
+        Self::Chromium,
+        Self::Opera,
+        Self::Vivaldi,
+        Self::Safari,
+        Self::Whale,
+    ];
+
+    pub fn as_config_value(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Chrome => "chrome",
+            Self::Edge => "edge",
+            Self::Firefox => "firefox",
+            Self::Brave => "brave",
+            Self::Chromium => "chromium",
+            Self::Opera => "opera",
+            Self::Vivaldi => "vivaldi",
+            Self::Safari => "safari",
+            Self::Whale => "whale",
+        }
+    }
+
+    pub fn from_config_value(value: &str) -> Self {
+        match value {
+            "chrome" => Self::Chrome,
+            "edge" => Self::Edge,
+            "firefox" => Self::Firefox,
+            "brave" => Self::Brave,
+            "chromium" => Self::Chromium,
+            "opera" => Self::Opera,
+            "vivaldi" => Self::Vivaldi,
+            "safari" => Self::Safari,
+            "whale" => Self::Whale,
+            _ => Self::None,
+        }
+    }
+}
+
+pub fn cookie_browser_args(browser: YtDlpCookieBrowser) -> Vec<String> {
+    if browser == YtDlpCookieBrowser::None {
+        Vec::new()
+    } else {
+        vec![
+            "--cookies-from-browser".to_string(),
+            browser.as_config_value().to_string(),
+        ]
+    }
+}
+
 pub fn update_ytdlp_channel(ytdlp_path: &Path, channel: YtDlpChannel) -> YtDlpResult<String> {
     update_ytdlp_to(ytdlp_path, channel.update_target())
         .map(|msg| format!("{} channel active ({})", channel.as_str(), msg))
@@ -415,6 +486,33 @@ mod tests {
         for channel in YtDlpChannel::ALL {
             assert_eq!(YtDlpChannel::from_config_value(channel.as_str()), channel);
         }
+    }
+
+    #[test]
+    fn cookie_browser_round_trips_from_config_string() {
+        for browser in YtDlpCookieBrowser::ALL {
+            assert_eq!(
+                YtDlpCookieBrowser::from_config_value(browser.as_config_value()),
+                browser
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_cookie_browser_disables_cookie_loading() {
+        assert_eq!(
+            YtDlpCookieBrowser::from_config_value("unknown-browser"),
+            YtDlpCookieBrowser::None
+        );
+    }
+
+    #[test]
+    fn cookie_browser_args_are_added_for_ytdlp() {
+        assert_eq!(
+            cookie_browser_args(YtDlpCookieBrowser::Chrome),
+            vec!["--cookies-from-browser".to_string(), "chrome".to_string()]
+        );
+        assert!(cookie_browser_args(YtDlpCookieBrowser::None).is_empty());
     }
 
     #[test]
