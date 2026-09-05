@@ -1,12 +1,11 @@
 # Work checkpoint
 
-- Active task: Corrected the PowerShell 7 Windows setup compilation failure
-  and Linux artifact verification, then triggered the corrected release run.
-- Next action: Inspect the completed run `33983711842` and published assets.
-- Changed files: `.github/workflows/release.yml`,
-  `tool/package_windows_release.ps1`, `tool/verify_desktop_artifact.dart`,
-  changelog, and this checkpoint.
-- CI result: Windows setup packaging now invokes the .NET Framework C# compiler
+- Active task: Fixed the release publisher's missing repository checkout, which
+  caused `gh release create --verify-tag` to fail outside a Git worktree.
+- Next action: Create the republish release commit, move `release-v1.2.0` to
+  it, and push the corrected commit and tag.
+- Changed files: `.github/workflows/release.yml`, changelog, and this
+  checkpoint.
   directly, avoiding unsupported PowerShell 7 `Add-Type -OutputType` values.
   Linux verification now checks Flutter's `data/flutter_assets` layout instead
   of requiring Windows-only `data/app.so` and `icudtl.dat`.
@@ -32,5 +31,7 @@
     incorrectly required Windows-only `data/app.so`; the verifier now matches
     Linux's `data/flutter_assets` layout.
   - Release workflow YAML parsed successfully and `git diff --check` passed.
-  - GitHub Actions run `33983711842` is queued/in progress for tag
-    `release-v1.2.0`; Linux and macOS native builds remain delegated to Actions.
+  - The previous publisher failure was reproduced by its log: no checkout left
+    the release job outside a Git repository; the publisher now checks out the
+    source before invoking `gh release create --verify-tag`.
+- Blockers: the corrected release tag run is still pending.

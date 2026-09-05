@@ -8,6 +8,8 @@
 - fix(ci): compiled the Windows setup launcher with the .NET Framework
   compiler for PowerShell 7 runners and matched Linux verification to Flutter's
   actual release bundle layout.
+- fix(ci): checked out the repository in the release publisher so
+  `gh release create --verify-tag` can resolve the pushed tag.
 - feat(release): added a self-extracting Windows setup executable alongside
   the portable ZIP release.
 
