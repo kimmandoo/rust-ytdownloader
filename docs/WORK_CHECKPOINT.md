@@ -1,14 +1,16 @@
 # Work checkpoint
 
-- Active task: Corrected the invalid pinned Flutter action SHA and triggered the
-  republish workflow successfully.
-- Next action: Inspect the completed GitHub Actions run and published assets.
-- Changed files: `.github/workflows/release.yml`, changelog, and this
-  checkpoint.
-- CI result: The Flutter action now uses the resolvable `v2` commit
-  `1a449444c387b1966244ae4d4f8c696479add0b2`; the workflow still publishes
-  the portable Windows ZIP and setup executable plus the Linux and macOS
-  artifacts.
+- Active task: Repaired the PowerShell 7 Windows setup compilation failure and
+  corrected Linux artifact verification.
+- Next action: Create the republish release commit, move `release-v1.2.0` to
+  it, and push the corrected commit and tag.
+- Changed files: `.github/workflows/release.yml`,
+  `tool/package_windows_release.ps1`, `tool/verify_desktop_artifact.dart`,
+  changelog, and this checkpoint.
+- CI result: Windows setup packaging now invokes the .NET Framework C# compiler
+  directly, avoiding unsupported PowerShell 7 `Add-Type -OutputType` values.
+  Linux verification now checks Flutter's `data/flutter_assets` layout instead
+  of requiring Windows-only `data/app.so` and `icudtl.dat`.
 - Catalog result: The support panel runs `yt-dlp --list-extractors`, displays
   every returned extractor in a scrollable list, supports case-insensitive
   search, and carries `(CURRENTLY BROKEN)` markers into the UI status.
@@ -20,15 +22,16 @@
   - A clean Windows release build passed, then
     `dart run tool/verify_desktop_artifact.dart windows` found the executable,
     Flutter DLL, engine data, and asset manifest.
-  - The Windows package script created the portable ZIP and setup EXE.
-  - Both archives' runtime payloads were inspected; the setup file is a PE
-    executable with the complete Flutter bundle embedded at its root.
-  - `spull.exe` launch smoke stayed alive for five seconds with the complete
-    runtime.
+  - The updated Windows package script compiled the setup launcher with the
+    .NET Framework C# compiler and created the portable ZIP and setup EXE.
+  - Both generated payloads were inspected; the setup file is a PE executable
+    with the complete Flutter bundle embedded at its root.
+  - `dart run tool/verify.dart` passed again: formatting, analyzer, and widget
+    tests passed.
+  - `dart run tool/verify_desktop_artifact.dart windows` passed.
+  - The previous remote Linux build produced a valid bundle but the verifier
+    incorrectly required Windows-only `data/app.so`; the verifier now matches
+    Linux's `data/flutter_assets` layout.
   - Release workflow YAML parsed successfully and `git diff --check` passed.
-  - Corrected workflow YAML parsed successfully, and the action SHA matched the
-    remote `subosito/flutter-action` `v2` tag.
-  - GitHub Actions run `33983192239` started from `00d10b3`; all three verify
-    jobs reached `Set up Flutter`, confirming that the action pin resolves.
-- Blockers: the release workflow is still in progress; Linux and macOS native
-  builds require their respective CI runners.
+- Blockers: the corrected release workflow requires a new tag-triggered run;
+  Linux and macOS native builds remain delegated to GitHub Actions.

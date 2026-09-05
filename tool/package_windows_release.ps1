@@ -34,8 +34,6 @@ try {
     Compress-Archive -Path (Join-Path $releasePath "*") `
         -DestinationPath $payloadArchive -CompressionLevel Optimal -Force
 
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    Add-Type -AssemblyName Microsoft.CSharp
     $launcherSource = @'
 using System;
 using System.Diagnostics;
@@ -165,13 +163,35 @@ internal static class SpullSetupLauncher
 }
 '@
 
-    Add-Type -TypeDefinition $launcherSource `
-        -OutputAssembly $stubExecutable `
-        -OutputType ConsoleApplication `
-        -ReferencedAssemblies @(
-            [System.IO.Compression.ZipFile].Assembly.Location,
-            [Microsoft.CSharp.RuntimeBinder.Binder].Assembly.Location
-        )
+    $launcherSourcePath = Join-Path $temporaryDirectory "SpullSetupLauncher.cs"
+    Set-Content -Path $launcherSourcePath -Value $launcherSource -Encoding UTF8
+
+    $compiler = @(
+        Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+        Join-Path $env:WINDIR "Microsoft.NET\Framework\v4.0.30319\csc.exe"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($compiler)) {
+        throw "The .NET Framework C# compiler was not found."
+    }
+
+    $frameworkDirectory = Split-Path -Parent $compiler
+    $compilerArguments = @(
+        "/nologo"
+        "/target:exe"
+        "/platform:x64"
+        "/optimize+"
+        "/out:$stubExecutable"
+        "/reference:$(Join-Path $frameworkDirectory 'System.dll')"
+        "/reference:$(Join-Path $frameworkDirectory 'System.Core.dll')"
+        "/reference:$(Join-Path $frameworkDirectory 'System.IO.Compression.dll')"
+        "/reference:$(Join-Path $frameworkDirectory 'System.IO.Compression.FileSystem.dll')"
+        "/reference:$(Join-Path $frameworkDirectory 'Microsoft.CSharp.dll')"
+        $launcherSourcePath
+    )
+    & $compiler @compilerArguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "The setup launcher compilation failed with exit code $LASTEXITCODE."
+    }
 
     $stubBytes = [System.IO.File]::ReadAllBytes($stubExecutable)
     $markerBytes = [System.Text.Encoding]::ASCII.GetBytes("SPULL_SETUP_PAYLOAD_V1_7F2C")

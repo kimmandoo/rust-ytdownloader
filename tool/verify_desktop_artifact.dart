@@ -15,10 +15,10 @@ Future<void> main(List<String> arguments) async {
   final requiredPaths = switch (target) {
     'linux' => <String>[
       'build/linux/x64/release/bundle/spull',
-      'build/linux/x64/release/bundle/data/app.so',
-      'build/linux/x64/release/bundle/data/icudtl.dat',
-      'build/linux/x64/release/bundle/data/flutter_assets/AssetManifest.bin',
       'build/linux/x64/release/bundle/lib/libflutter_linux_gtk.so',
+      'build/linux/x64/release/bundle/data/flutter_assets/AssetManifest.bin',
+      'build/linux/x64/release/bundle/data/flutter_assets/FontManifest.json',
+      'build/linux/x64/release/bundle/data/flutter_assets/NOTICES.Z',
     ],
     'macos' => <String>[
       'build/macos/Build/Products/Release/spull.app/Contents/MacOS/spull',

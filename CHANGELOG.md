@@ -5,6 +5,9 @@
   Flutter and GitHub Actions dependencies, and rejected incomplete runtime bundles.
 - fix(ci): corrected the pinned Flutter action commit so release jobs can
   resolve the setup action.
+- fix(ci): compiled the Windows setup launcher with the .NET Framework
+  compiler for PowerShell 7 runners and matched Linux verification to Flutter's
+  actual release bundle layout.
 - feat(release): added a self-extracting Windows setup executable alongside
   the portable ZIP release.
 
