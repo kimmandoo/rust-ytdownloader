@@ -469,26 +469,43 @@ class SpullBackend {
   }
 
   Future<SupportedSites> supportedSites() async {
-    // Featured sites remain useful while yt-dlp is offline. The extractor list
-    // is deliberately explicit so the panel can render without a network call.
-    const featured = <SupportedSite>[
-      SupportedSite('YouTube', SiteStatus.stable),
-      SupportedSite('YouTube Music', SiteStatus.stable),
-      SupportedSite('TikTok', SiteStatus.experimental),
-      SupportedSite('SoundCloud', SiteStatus.experimental),
-      SupportedSite('Vimeo', SiteStatus.experimental),
-      SupportedSite('X / Twitter', SiteStatus.experimental),
-      SupportedSite('Instagram', SiteStatus.experimental),
-      SupportedSite('Twitch', SiteStatus.experimental),
-    ];
-    const extractors = <SupportedSite>[
-      ...featured,
-      SupportedSite('Facebook', SiteStatus.experimental),
-      SupportedSite('Bilibili', SiteStatus.experimental),
-      SupportedSite('Niconico', SiteStatus.experimental),
-      SupportedSite('247sports', SiteStatus.broken),
-    ];
-    return const SupportedSites(featured: featured, extractors: extractors);
+    final result = await Process.run(
+      ytdlpExecutable,
+      const <String>['--list-extractors'],
+      environment: _environment,
+      runInShell: true,
+    );
+    if (result.exitCode != 0) {
+      final details = '${result.stderr}'.trim();
+      throw details.isEmpty
+          ? 'yt-dlp extractor 목록을 가져오지 못했습니다.'
+          : 'yt-dlp extractor 목록을 가져오지 못했습니다: $details';
+    }
+
+    final extractors = _parseExtractorList('${result.stdout}');
+    if (extractors.isEmpty) {
+      throw 'yt-dlp extractor 목록이 비어 있습니다.';
+    }
+    return SupportedSites(extractors: extractors);
+  }
+
+  List<SupportedSite> _parseExtractorList(String output) {
+    const brokenMarker = ' (CURRENTLY BROKEN)';
+    final seen = <String>{};
+    final extractors = <SupportedSite>[];
+    for (final line in output.split(RegExp(r'\r?\n'))) {
+      final raw = line.trim();
+      if (raw.isEmpty) continue;
+      final broken = raw.endsWith(brokenMarker);
+      final name = broken
+          ? raw.substring(0, raw.length - brokenMarker.length).trim()
+          : raw;
+      if (name.isEmpty || !seen.add(name)) continue;
+      extractors.add(
+        SupportedSite(name, broken ? SiteStatus.broken : SiteStatus.stable),
+      );
+    }
+    return extractors;
   }
 
   /// Starts a sequential queue and emits live yt-dlp progress events.

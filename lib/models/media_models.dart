@@ -217,8 +217,7 @@ class SupportedSite {
 }
 
 class SupportedSites {
-  const SupportedSites({required this.featured, required this.extractors});
+  const SupportedSites({required this.extractors});
 
-  final List<SupportedSite> featured;
   final List<SupportedSite> extractors;
 }

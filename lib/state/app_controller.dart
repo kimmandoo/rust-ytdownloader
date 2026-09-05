@@ -29,8 +29,8 @@ class SpullController extends ChangeNotifier {
   int downloadCurrent = 0;
   int downloadTotal = 0;
   bool supportPanelOpen = false;
-  bool supportExpanded = false;
   bool supportLoading = false;
+  String supportError = '';
   String supportQuery = '';
 
   StreamSubscription<DownloadEvent>? _downloadSubscription;
@@ -296,11 +296,27 @@ class SpullController extends ChangeNotifier {
     supportPanelOpen = !supportPanelOpen;
     notifyListeners();
     if (!supportPanelOpen || sites != null || supportLoading) return;
+    await _loadSupportedSites();
+  }
+
+  Future<void> retrySupportedSites() async {
+    if (!supportPanelOpen || supportLoading) return;
+    sites = null;
+    await _loadSupportedSites();
+  }
+
+  Future<void> _loadSupportedSites() async {
     supportLoading = true;
+    supportError = '';
     notifyListeners();
-    sites = await _backend.supportedSites();
-    supportLoading = false;
-    notifyListeners();
+    try {
+      sites = await _backend.supportedSites();
+    } catch (error) {
+      supportError = '$error';
+    } finally {
+      supportLoading = false;
+      notifyListeners();
+    }
   }
 
   List<SupportedSite> get filteredExtractors {
@@ -314,11 +330,6 @@ class SpullController extends ChangeNotifier {
 
   void updateSupportQuery(String query) {
     supportQuery = query;
-    notifyListeners();
-  }
-
-  void toggleSupportExpanded() {
-    supportExpanded = !supportExpanded;
     notifyListeners();
   }
 

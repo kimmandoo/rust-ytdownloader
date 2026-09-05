@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026-09-06
+- fix(ci): aligned desktop verification with the release-tag workflow, pinned
+  Flutter and GitHub Actions dependencies, and rejected incomplete runtime bundles.
 
 - feat(spull): migrated the desktop downloader to Dart and Flutter.
 - fix(media): embedded high-quality center-cropped square album art into audio exports without sidecar images.
@@ -16,3 +18,4 @@
 - refactor(branding): replaced fluorescent mint accents in the UI and raster app icons with a muted sage tone.
 - ci(release): removed the Intel macOS matrix job and retained Apple Silicon, Windows, and Linux artifacts.
 - fix(ci): packaged the complete Windows release bundle with `data/` and `flutter_windows.dll` instead of publishing only the executable.
+- feat(sites): loaded the complete supported-extractor catalog from yt-dlp and preserved current-broken markers.

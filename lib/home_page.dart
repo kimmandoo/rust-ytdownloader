@@ -539,8 +539,10 @@ class _SpullDashboardState extends State<_SpullDashboard> {
 
   Widget _buildSupportButton() {
     return PixelButton(
-      label: controller.supportPanelOpen ? 'CLOSE MAP' : 'SITE MAP',
-      icon: Icons.map_outlined,
+      label: controller.supportPanelOpen
+          ? 'CLOSE EXTRACTORS'
+          : 'EXTRACTOR CATALOG',
+      icon: Icons.list_alt_outlined,
       onPressed: controller.toggleSupportPanel,
       expand: true,
     );
@@ -550,61 +552,139 @@ class _SpullDashboardState extends State<_SpullDashboard> {
     if (controller.supportLoading) {
       return const PixelPanel(
         child: Text(
-          '지원 사이트를 스캔 중...',
+          'yt-dlp extractor 목록을 불러오는 중...',
           style: TextStyle(color: PixelColors.muted, fontSize: 11),
+        ),
+      );
+    }
+    if (controller.supportError.isNotEmpty) {
+      return PixelPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text(
+              controller.supportError,
+              style: const TextStyle(
+                color: PixelColors.text,
+                fontSize: 10,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 9),
+            PixelButton(
+              label: 'RETRY',
+              icon: Icons.refresh,
+              onPressed: controller.retrySupportedSites,
+              expand: true,
+            ),
+          ],
         ),
       );
     }
     final sites = controller.sites;
     if (sites == null) return const SizedBox.shrink();
-    final visible = controller.supportExpanded
-        ? controller.filteredExtractors
-        : sites.featured;
+    final visible = controller.filteredExtractors;
     return PixelPanel(
       padding: const EdgeInsets.all(11),
       color: PixelColors.panelLight,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const Text(
-            'SUPPORTED SITES',
-            style: TextStyle(
-              color: PixelColors.text,
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
+          Row(
+            children: <Widget>[
+              const Expanded(
+                child: Text(
+                  'SUPPORTED EXTRACTORS',
+                  style: TextStyle(
+                    color: PixelColors.text,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              PixelTag(
+                label: '${visible.length}/${sites.extractors.length}',
+                color: PixelColors.sky,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _supportSearchController,
+            onChanged: controller.updateSupportQuery,
+            style: const TextStyle(fontSize: 11, color: PixelColors.text),
+            decoration: const InputDecoration(
+              hintText: 'extractor 검색',
+              prefixIcon: Icon(Icons.search, size: 16),
             ),
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 5,
-            runSpacing: 5,
-            children: visible
-                .map(
-                  (site) => PixelTag(
-                    label: site.name,
-                    color: _siteColor(site.status),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 9),
-          PixelButton(
-            label: controller.supportExpanded ? 'COLLAPSE' : 'ALL EXTRACTORS',
-            onPressed: controller.toggleSupportExpanded,
-            expand: true,
-          ),
-          if (controller.supportExpanded) ...<Widget>[
-            const SizedBox(height: 8),
-            TextField(
-              controller: _supportSearchController,
-              onChanged: controller.updateSupportQuery,
-              style: const TextStyle(fontSize: 11, color: PixelColors.text),
-              decoration: const InputDecoration(
-                hintText: '사이트 검색',
-                prefixIcon: Icon(Icons.search, size: 16),
-              ),
+          const Text(
+            'AVAILABLE · CURRENTLY BROKEN',
+            style: TextStyle(
+              color: PixelColors.muted,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.7,
             ),
-          ],
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 320,
+            child: visible.isEmpty
+                ? const Center(
+                    child: Text(
+                      '검색 결과가 없습니다.',
+                      style: TextStyle(color: PixelColors.muted, fontSize: 10),
+                    ),
+                  )
+                : Scrollbar(
+                    child: ListView.separated(
+                      itemCount: visible.length,
+                      separatorBuilder: (_, index) => const SizedBox(height: 4),
+                      itemBuilder: (_, index) {
+                        final site = visible[index];
+                        final broken = site.status == SiteStatus.broken;
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: PixelColors.panel,
+                            border: Border.all(
+                              color: broken
+                                  ? PixelColors.pink
+                                  : PixelColors.outline,
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: <Widget>[
+                              Expanded(
+                                child: Text(
+                                  site.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: PixelColors.text,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              PixelTag(
+                                label: broken ? 'BROKEN' : 'AVAILABLE',
+                                color: _siteColor(site.status),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+          ),
         ],
       ),
     );

@@ -15,6 +15,7 @@
 - Stable YouTube support plus experimental yt-dlp-compatible media sites.
 - Audio formats: MP3, WAV, M4A, FLAC. Video formats: MP4, WEBM.
 - Playlist analysis with per-item selection, live progress, logs, stop control, and output-folder shortcuts.
+- Live supported-extractor catalog loaded from the installed yt-dlp binary, with search and current-broken markers.
 - MP3 exports embed a high-quality center-cropped square album cover instead of leaving a sidecar image.
 - Long transfers keep resumable fragments, retry network fragments, trim path lengths, throttle UI events, and terminate child processes on cancel.
 - Browser-cookie and `cookies.txt` authentication options.
@@ -50,10 +51,26 @@ flutter build macos --release
 flutter build linux --release
 ```
 
-The Linux release artifact is a `.tar.gz` containing the relocatable Flutter bundle; extract it and run `bundle/spull`.
-The Windows release artifact is a `.zip` containing `spull.exe`, `data/`, and `flutter_windows.dll`; extract the full archive before launching.
+The Linux release artifact is a `.tar.gz` containing the complete Flutter bundle
+at its root; extract it and run `spull`.
+The Windows release artifact is a `.zip` containing the complete Flutter
+runtime at its root; extract the full archive before launching `spull.exe`.
 
 The macOS Release configuration uses `CODE_SIGN_IDENTITY = -` and disables provisioning-profile requirements, producing an ad-hoc signed app suitable for local distribution. It is not notarized and cannot be used as a Mac App Store submission. See [`macos/ExportOptions.plist`](macos/ExportOptions.plist).
+
+### Continuous integration
+
+GitHub Actions verifies and builds Linux, macOS, and Windows on every
+`release-*` tag. A release tag must point to a commit whose subject starts with
+`release(scope):`, such as `release(v1.2.0): publish desktop artifacts`.
+`workflow_dispatch` runs the same verification and uploads complete desktop
+bundles without publishing a release. Ordinary branch pushes do not publish
+artifacts.
+
+The CI build validates the platform executable together with its Flutter
+runtime files before packaging. Windows archives place `spull.exe`,
+`flutter_windows.dll`, plugin DLLs, and `data/` at the archive root; extract the
+whole archive before launching the app.
 
 ### Dependency locations
 
