@@ -53,8 +53,11 @@ flutter build linux --release
 
 The Linux release artifact is a `.tar.gz` containing the complete Flutter bundle
 at its root; extract it and run `spull`.
-The Windows release artifact is a `.zip` containing the complete Flutter
-runtime at its root; extract the full archive before launching `spull.exe`.
+Windows releases provide two options:
+- `spull-windows-x86_64.zip`: portable bundle; extract the full archive and run
+  `spull.exe`.
+- `spull-windows-x86_64-setup.exe`: self-extracting installer; installs Spull
+  under `%LOCALAPPDATA%\Spull`, creates a Start Menu shortcut, and launches it.
 
 The macOS Release configuration uses `CODE_SIGN_IDENTITY = -` and disables provisioning-profile requirements, producing an ad-hoc signed app suitable for local distribution. It is not notarized and cannot be used as a Mac App Store submission. See [`macos/ExportOptions.plist`](macos/ExportOptions.plist).
 
@@ -71,6 +74,9 @@ The CI build validates the platform executable together with its Flutter
 runtime files before packaging. Windows archives place `spull.exe`,
 `flutter_windows.dll`, plugin DLLs, and `data/` at the archive root; extract the
 whole archive before launching the app.
+
+The Windows release job publishes both the portable ZIP and the
+self-extracting setup executable.
 
 ### Dependency locations
 

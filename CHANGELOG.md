@@ -3,6 +3,8 @@
 ## 2026-09-06
 - fix(ci): aligned desktop verification with the release-tag workflow, pinned
   Flutter and GitHub Actions dependencies, and rejected incomplete runtime bundles.
+- feat(release): added a self-extracting Windows setup executable alongside
+  the portable ZIP release.
 
 - feat(spull): migrated the desktop downloader to Dart and Flutter.
 - fix(media): embedded high-quality center-cropped square album art into audio exports without sidecar images.

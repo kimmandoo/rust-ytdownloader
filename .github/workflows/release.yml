@@ -80,6 +80,7 @@ jobs:
             bundle_path: build/windows/x64/runner/Release
             artifact_name: spull-windows-x86_64
             asset_name: spull-windows-x86_64.zip
+            setup_asset_name: spull-windows-x86_64-setup.exe
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -103,7 +104,7 @@ jobs:
       - name: Verify complete release bundle
         run: dart run tool/verify_desktop_artifact.dart ${{ matrix.target }}
       - name: Package release bundle
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && matrix.target != 'windows'
         shell: bash
         env:
           ARTIFACT_PATH: ${{ matrix.bundle_path }}
@@ -112,10 +113,6 @@ jobs:
         run: |
           mkdir -p release-assets
           case "$TARGET" in
-            windows)
-              powershell -NoProfile -Command \
-                'Compress-Archive -Path (Join-Path $env:ARTIFACT_PATH "*") -DestinationPath ("release-assets/" + $env:ASSET_NAME) -Force'
-              ;;
             macos)
               ditto -c -k --sequesterRsrc --keepParent "$ARTIFACT_PATH" "release-assets/$ASSET_NAME"
               ;;
@@ -123,12 +120,25 @@ jobs:
               tar -czf "release-assets/$ASSET_NAME" -C "$ARTIFACT_PATH" .
               ;;
           esac
+      - name: Package Windows release bundles
+        if: github.event_name == 'push' && matrix.target == 'windows'
+        shell: pwsh
+        run: .\tool\package_windows_release.ps1 -ReleaseDirectory '${{ matrix.bundle_path }}' -OutputDirectory release-assets
       - name: Upload release package
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && matrix.target != 'windows'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ matrix.artifact_name }}
           path: release-assets/${{ matrix.asset_name }}
+          if-no-files-found: error
+      - name: Upload Windows release packages
+        if: github.event_name == 'push' && matrix.target == 'windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ matrix.artifact_name }}
+          path: |
+            release-assets/${{ matrix.asset_name }}
+            release-assets/${{ matrix.setup_asset_name }}
           if-no-files-found: error
       - name: Upload complete desktop bundle
         if: github.event_name == 'workflow_dispatch'
@@ -156,7 +166,9 @@ jobs:
         shell: bash
         run: |
           assets=(release-assets/*)
-          test "${#assets[@]}" -eq 3
+          test "${#assets[@]}" -eq 4
+          test -f release-assets/spull-windows-x86_64.zip
+          test -f release-assets/spull-windows-x86_64-setup.exe
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
