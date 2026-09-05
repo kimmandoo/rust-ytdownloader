@@ -11,6 +11,7 @@ void main() {
     expect(find.text('MEDIA DOWNLOADER'), findsOneWidget);
     expect(find.text('LINKS'), findsOneWidget);
     expect(find.text('SCAN LINKS'), findsOneWidget);
+    expect(find.text('DOWNLOAD FOLDER'), findsOneWidget);
 
     controller.dispose();
   });

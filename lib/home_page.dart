@@ -287,6 +287,8 @@ class _SpullDashboardState extends State<_SpullDashboard> {
           _buildErrorBanner(),
           const SizedBox(height: 14),
         ],
+        _buildFolderPanel(),
+        const SizedBox(height: 16),
         _buildUrlPanel(),
         const SizedBox(height: 16),
         _buildQueuePanel(),
@@ -638,6 +640,111 @@ class _SpullDashboardState extends State<_SpullDashboard> {
             tooltip: '오류 닫기',
             onPressed: controller.clearError,
             icon: const Icon(Icons.close, color: PixelColors.muted, size: 17),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFolderPanel() {
+    final path = controller.settings.downloadDir;
+    final configured = path?.isNotEmpty == true;
+    final canEdit = controller.isReadyForInput && !controller.isBusy;
+    final displayPath = configured ? path! : '기본 Downloads 폴더를 준비 중입니다.';
+    return PixelPanel(
+      color: PixelColors.panelLight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Container(
+                width: 30,
+                height: 30,
+                color: PixelColors.sky,
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.folder_outlined,
+                  color: PixelColors.ink,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'DOWNLOAD FOLDER',
+                      style: TextStyle(
+                        color: PixelColors.text,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      '새 파일이 저장되는 위치',
+                      style: TextStyle(color: PixelColors.muted, fontSize: 9),
+                    ),
+                  ],
+                ),
+              ),
+              PixelTag(
+                label: configured ? 'READY' : 'SETUP',
+                color: configured ? PixelColors.sky : PixelColors.orange,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            decoration: BoxDecoration(
+              color: PixelColors.panel,
+              border: Border.all(color: PixelColors.outline, width: 1),
+            ),
+            child: Row(
+              children: <Widget>[
+                const Icon(
+                  Icons.folder_open,
+                  color: PixelColors.orange,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    displayPath,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: PixelColors.text,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.end,
+            children: <Widget>[
+              PixelButton(
+                label: 'CHANGE FOLDER',
+                icon: Icons.drive_file_move_outline,
+                onPressed: canEdit ? controller.chooseFolder : null,
+              ),
+              if (configured)
+                PixelButton(
+                  label: 'OPEN',
+                  icon: Icons.folder_open,
+                  onPressed: controller.openFolder,
+                ),
+            ],
           ),
         ],
       ),
@@ -1038,13 +1145,6 @@ class _SpullDashboardState extends State<_SpullDashboard> {
             runSpacing: 9,
             alignment: WrapAlignment.end,
             children: <Widget>[
-              PixelButton(
-                label: 'OPEN FOLDER',
-                icon: Icons.folder_open,
-                onPressed: controller.settings.downloadDir == null
-                    ? null
-                    : controller.openFolder,
-              ),
               if (isDownloading)
                 PixelButton(
                   label: 'CANCEL',
@@ -1063,26 +1163,6 @@ class _SpullDashboardState extends State<_SpullDashboard> {
                       ? controller.startDownload
                       : null,
                 ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  controller.settings.downloadDir ??
-                      '저장 폴더를 선택하면 다운로드가 활성화됩니다.',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: PixelColors.muted, fontSize: 9),
-                ),
-              ),
-              const SizedBox(width: 8),
-              PixelButton(
-                label: 'SET FOLDER',
-                icon: Icons.drive_file_move_outline,
-                onPressed: controller.chooseFolder,
-              ),
             ],
           ),
         ],

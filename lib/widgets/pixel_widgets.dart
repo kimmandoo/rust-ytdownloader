@@ -11,11 +11,11 @@ class PixelColors {
   static const muted = Color(0xFF766B78);
   static const orange = Color(0xFFE28A66);
   static const yellow = Color(0xFFD4AD55);
-  static const mint = Color(0xFF69B89F);
+  static const mint = Color(0xFF4F7565);
   static const pink = Color(0xFFD86D82);
   static const sky = Color(0xFFCE9A82);
   static const logoOrange = Color(0xFFFF9F68);
-  static const logoMint = Color(0xFF7EE6C4);
+  static const logoMint = Color(0xFF8DAA9D);
   static const logoPink = Color(0xFFFF7891);
 }
 
@@ -311,7 +311,7 @@ class _PixelScenePainter extends CustomPainter {
     const oy = 3.0;
     final dark = PixelColors.ink;
 
-    // A small pixel mascot rides the cargo pod.
+    // Accent blocks keep the small scene readable.
     block(ox + 7, oy - 2, 2, 2, dark);
     block(ox + 6, oy - 3, 4, 1, PixelColors.mint);
     block(ox + 2, oy, 4, 1, dark);

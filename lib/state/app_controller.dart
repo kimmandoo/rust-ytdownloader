@@ -20,7 +20,7 @@ class SpullController extends ChangeNotifier {
   PlaylistInfo? playlist;
   SupportedSites? sites;
   AppPhase phase = AppPhase.booting;
-  String initMessage = '픽셀 엔진을 깨우는 중...';
+  String initMessage = '앱을 준비하는 중...';
   double initPercent = 0;
   String errorMessage = '';
   String downloadMessage = '다운로드를 시작하면 진행률이 표시됩니다.';
@@ -90,7 +90,14 @@ class SpullController extends ChangeNotifier {
       _saveSettings(settings.copyWith(cookieBrowser: browser));
 
   Future<void> chooseFolder() async {
-    final path = await getDirectoryPath(confirmButtonText: '이 폴더 사용');
+    final initialDirectory = settings.downloadDir?.isNotEmpty == true
+        ? settings.downloadDir
+        : _backend.defaultDownloadDirectory;
+    final path = await getDirectoryPath(
+      initialDirectory: initialDirectory,
+      confirmButtonText: '이 폴더 사용',
+      canCreateDirectories: true,
+    );
     if (path != null && path.isNotEmpty) {
       await _saveSettings(settings.copyWith(downloadDir: path));
     }

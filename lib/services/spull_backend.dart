@@ -31,20 +31,47 @@ class SpullBackend {
     return Directory(p.join(root, 'Spull'));
   }
 
+  String get defaultDownloadDirectory {
+    final environment = Platform.environment;
+    final home = Platform.isWindows
+        ? (environment['USERPROFILE'] ??
+              environment['HOME'] ??
+              Directory.systemTemp.path)
+        : (environment['HOME'] ?? Directory.systemTemp.path);
+    return p.join(home, 'Downloads');
+  }
+
   Directory get binDirectory => Directory(p.join(dataDirectory.path, 'bin'));
 
   File get settingsFile => File(p.join(dataDirectory.path, 'settings.json'));
 
   Future<AppSettings> loadSettings() async {
+    AppSettings loaded = const AppSettings();
     try {
-      if (!await settingsFile.exists()) return const AppSettings();
-      final content = await settingsFile.readAsString();
-      final json = jsonDecode(content);
-      if (json is Map<String, dynamic>) return AppSettings.fromJson(json);
+      if (await settingsFile.exists()) {
+        final content = await settingsFile.readAsString();
+        final json = jsonDecode(content);
+        if (json is Map<String, dynamic>) {
+          loaded = AppSettings.fromJson(json);
+        }
+      }
     } catch (_) {
       // A damaged config must not prevent the app from opening.
     }
-    return const AppSettings();
+
+    if (loaded.downloadDir != null && loaded.downloadDir!.isNotEmpty) {
+      return loaded;
+    }
+
+    final defaultDirectory = Directory(defaultDownloadDirectory);
+    try {
+      await defaultDirectory.create(recursive: true);
+      final withDefault = loaded.copyWith(downloadDir: defaultDirectory.path);
+      await saveSettings(withDefault);
+      return withDefault;
+    } catch (_) {
+      return loaded;
+    }
   }
 
   Future<AppSettings> saveSettings(AppSettings settings) async {
@@ -69,7 +96,7 @@ class SpullBackend {
       events.add(
         const InitEvent(
           kind: InitKind.starting,
-          message: '픽셀 엔진을 깨우는 중...',
+          message: '앱을 준비하는 중...',
           percent: 5,
         ),
       );
@@ -214,19 +241,33 @@ class SpullBackend {
   }
 
   Future<void> _installFfmpeg(void Function(double) onProgress) async {
-    final archiveFile = File(p.join(binDirectory.path, '.ffmpeg-download.zip'));
+    final linux = Platform.isLinux;
+    final archiveFile = File(
+      p.join(
+        binDirectory.path,
+        linux ? '.ffmpeg-download.tar.xz' : '.ffmpeg-download.zip',
+      ),
+    );
     try {
-      final url = Platform.isWindows
-          ? _windowsFfmpegUrl
-          : Platform.isMacOS
-          ? _macFfmpegUrl
-          : null;
-      if (url == null) throw '이 운영체제의 자동 ffmpeg 설치 주소가 없습니다.';
+      late final String url;
+      if (Platform.isWindows) {
+        url = _windowsFfmpegUrl;
+      } else if (Platform.isMacOS) {
+        url = _macFfmpegUrl;
+      } else if (linux) {
+        url = await _linuxFfmpegUrl();
+      } else {
+        throw '이 운영체제의 자동 ffmpeg 설치 주소가 없습니다.';
+      }
       await _downloadAsset(url, archiveFile, onProgress);
-      await _extractZipBinary(
-        archiveFile,
-        Platform.isWindows ? 'ffmpeg.exe' : 'ffmpeg',
-      );
+      if (linux) {
+        await _extractTarXzBinary(archiveFile, 'ffmpeg');
+      } else {
+        await _extractZipBinary(
+          archiveFile,
+          Platform.isWindows ? 'ffmpeg.exe' : 'ffmpeg',
+        );
+      }
     } finally {
       if (await archiveFile.exists()) await archiveFile.delete();
     }
@@ -297,6 +338,25 @@ class SpullBackend {
     await _markExecutable(destination);
   }
 
+  Future<void> _extractTarXzBinary(File archiveFile, String targetName) async {
+    final tarBytes = XZDecoder().decodeBytes(await archiveFile.readAsBytes());
+    final archive = TarDecoder().decodeBytes(tarBytes);
+    ArchiveFile? match;
+    for (final entry in archive.files) {
+      if (entry.isFile &&
+          p.basename(entry.name.replaceAll('\\', '/')) == targetName) {
+        match = entry;
+        break;
+      }
+    }
+    if (match == null) throw '$targetName 파일이 압축 파일에 없습니다.';
+    final bytes = match.readBytes();
+    if (bytes == null || bytes.isEmpty) throw '$targetName 파일이 비어 있습니다.';
+    final destination = File(p.join(binDirectory.path, targetName));
+    await destination.writeAsBytes(bytes, flush: true);
+    await _markExecutable(destination);
+  }
+
   Future<void> _replaceFile(File partial, File destination) async {
     if (await destination.exists()) await destination.delete();
     await partial.rename(destination.path);
@@ -316,7 +376,10 @@ class SpullBackend {
     if (Platform.isMacOS) {
       return 'https://github.com/denoland/deno/releases/latest/download/deno-${architecture == 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin.zip';
     }
-    throw 'Linux Deno 자동 설치는 현재 지원하지 않습니다.';
+    if (Platform.isLinux) {
+      return 'https://github.com/denoland/deno/releases/latest/download/deno-${architecture == 'arm64' ? 'aarch64' : 'x86_64'}-unknown-linux-gnu.zip';
+    }
+    throw '이 운영체제의 Deno 자동 설치 주소가 없습니다.';
   }
 
   Future<String> _machineArchitecture() async {
@@ -346,6 +409,12 @@ class SpullBackend {
       'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
 
   String get _macFfmpegUrl => 'https://evermeet.cx/ffmpeg/getrelease/zip';
+
+  Future<String> _linuxFfmpegUrl() async {
+    final architecture = await _machineArchitecture();
+    final suffix = architecture == 'arm64' ? 'arm64' : 'amd64';
+    return 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-$suffix-static.tar.xz';
+  }
 
   String get ytdlpExecutable {
     final localName = Platform.isWindows ? 'yt-dlp.exe' : 'yt-dlp';

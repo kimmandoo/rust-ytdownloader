@@ -37,7 +37,7 @@ jobs:
           cat > release-notes.md <<'EOF'
           ## Spull Flutter Release
 
-          A Dart + Flutter desktop build with the pixel-art Media Quest interface.
+          A Dart + Flutter desktop media downloader for Windows, macOS, and Linux.
 
           macOS artifacts are ad-hoc signed for local distribution. They are not notarized.
           EOF
@@ -56,6 +56,11 @@ jobs:
             target: windows
             artifact: build/windows/x64/runner/Release/spull.exe
             asset_name: spull-windows-x86_64.exe
+          - name: Linux x86_64
+            os: ubuntu-latest
+            target: linux
+            artifact: build/linux/x64/release/bundle
+            asset_name: spull-linux-x86_64.tar.gz
           - name: macOS Intel
             os: macos-13
             target: macos
@@ -74,6 +79,11 @@ jobs:
         with:
           channel: ${{ env.FLUTTER_CHANNEL }}
           cache: true
+      - name: Install Linux build dependencies
+        if: matrix.target == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libstdc++-12-dev
       - name: Enable desktop target
         run: flutter config --enable-${{ matrix.target }}-desktop
       - name: Install Dart packages
@@ -90,6 +100,8 @@ jobs:
           mkdir -p release-assets
           if [[ "${ASSET_NAME}" == *.zip ]]; then
             ditto -c -k --sequesterRsrc --keepParent "${ARTIFACT}" "release-assets/${ASSET_NAME}"
+          elif [[ "${ASSET_NAME}" == *.tar.gz ]]; then
+            tar -czf "release-assets/${ASSET_NAME}" -C "$(dirname "${ARTIFACT}")" "$(basename "${ARTIFACT}")"
           else
             cp "${ARTIFACT}" "release-assets/${ASSET_NAME}"
           fi
