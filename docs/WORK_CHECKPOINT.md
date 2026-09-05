@@ -1,13 +1,14 @@
 # Work checkpoint
 
-- Active task: Fixed the release publisher's missing repository checkout and
-  triggered the corrected release run.
-- Next action: Inspect completed run `33984088001` and the published assets.
-- Changed files: `.github/workflows/release.yml`, changelog, and this
+- Active task: Converted the Windows setup asset into a GUI installer wizard
+  without a console window.
+- Next action: Create the republish release commit, move `release-v1.2.0` to
+  it, and push the corrected commit and tag.
+- Changed files: `tool/package_windows_release.ps1`, changelog, and this
   checkpoint.
-  directly, avoiding unsupported PowerShell 7 `Add-Type -OutputType` values.
-  Linux verification now checks Flutter's `data/flutter_assets` layout instead
-  of requiring Windows-only `data/app.so` and `icudtl.dat`.
+- CI result: The setup launcher now compiles as a WinForms `winexe`; it shows
+  an installation-folder wizard, optional Start Menu shortcut and launch
+  choices, progress state, completion dialog, and error dialogs.
 - Catalog result: The support panel runs `yt-dlp --list-extractors`, displays
   every returned extractor in a scrollable list, supports case-insensitive
   search, and carries `(CURRENTLY BROKEN)` markers into the UI status.
@@ -19,18 +20,15 @@
   - A clean Windows release build passed, then
     `dart run tool/verify_desktop_artifact.dart windows` found the executable,
     Flutter DLL, engine data, and asset manifest.
-  - The updated Windows package script compiled the setup launcher with the
-    .NET Framework C# compiler and created the portable ZIP and setup EXE.
-  - Both generated payloads were inspected; the setup file is a PE executable
-    with the complete Flutter bundle embedded at its root.
-  - `dart run tool/verify.dart` passed again: formatting, analyzer, and widget
-    tests passed.
+  - The updated Windows package script compiled the setup launcher and created
+    the portable ZIP and GUI setup EXE.
+  - The setup EXE passed PE validation with Windows GUI subsystem `2`; no
+    console subsystem is present.
+  - The setup payload was inspected and contains the complete Flutter runtime.
+  - `dart run tool/verify.dart` passed: formatting, analyzer, and widget tests.
   - `dart run tool/verify_desktop_artifact.dart windows` passed.
-  - The previous remote Linux build produced a valid bundle but the verifier
-    incorrectly required Windows-only `data/app.so`; the verifier now matches
-    Linux's `data/flutter_assets` layout.
   - Release workflow YAML parsed successfully and `git diff --check` passed.
-  - The previous publisher failure was reproduced by its log: no checkout left
-    the release job outside a Git repository; the publisher now checks out the
-    source before invoking `gh release create --verify-tag`.
-- GitHub Actions run `33984088001` is queued for tag `release-v1.2.0`.
+  - The release publisher now checks out source before
+    `gh release create --verify-tag`; run `33984088001` is in progress.
+- Blockers: the external release run must finish on Linux/macOS/Windows
+  runners before the assets are published.

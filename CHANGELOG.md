@@ -12,6 +12,8 @@
   `gh release create --verify-tag` can resolve the pushed tag.
 - feat(release): added a self-extracting Windows setup executable alongside
   the portable ZIP release.
+- fix(release): changed the Windows setup asset into a GUI installer wizard
+  without a console window.
 
 - feat(spull): migrated the desktop downloader to Dart and Flutter.
 - fix(media): embedded high-quality center-cropped square album art into audio exports without sidecar images.
