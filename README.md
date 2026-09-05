@@ -56,8 +56,10 @@ at its root; extract it and run `spull`.
 Windows releases provide two options:
 - `spull-windows-x86_64.zip`: portable bundle; extract the full archive and run
   `spull.exe`.
-- `spull-windows-x86_64-setup.exe`: self-extracting installer; installs Spull
-  under `%LOCALAPPDATA%\Spull`, creates a Start Menu shortcut, and launches it.
+- `spull-windows-x86_64-setup.zip`: antivirus-safe GUI installer bundle;
+  extract it and double-click `Install-Spull.vbs`. The wizard installs Spull
+  under `%LOCALAPPDATA%\Spull`, creates a Start Menu shortcut, and can launch
+  the app.
 
 The macOS Release configuration uses `CODE_SIGN_IDENTITY = -` and disables provisioning-profile requirements, producing an ad-hoc signed app suitable for local distribution. It is not notarized and cannot be used as a Mac App Store submission. See [`macos/ExportOptions.plist`](macos/ExportOptions.plist).
 
@@ -75,8 +77,8 @@ runtime files before packaging. Windows archives place `spull.exe`,
 `flutter_windows.dll`, plugin DLLs, and `data/` at the archive root; extract the
 whole archive before launching the app.
 
-The Windows release job publishes both the portable ZIP and the
-self-extracting setup executable.
+The Windows release job publishes the portable ZIP and a script-based GUI setup
+bundle instead of an unsigned custom setup executable.
 
 ### Dependency locations
 

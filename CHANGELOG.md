@@ -14,6 +14,8 @@
   the portable ZIP release.
 - fix(release): changed the Windows setup asset into a GUI installer wizard
   without a console window.
+- fix(release): replaced the unsigned custom setup EXE with a script-based GUI
+  setup ZIP to avoid antivirus quarantine of the self-extracting binary.
 
 - feat(spull): migrated the desktop downloader to Dart and Flutter.
 - fix(media): embedded high-quality center-cropped square album art into audio exports without sidecar images.

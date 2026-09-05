@@ -1,13 +1,15 @@
 # Work checkpoint
 
-- Active task: Converted the Windows setup asset into a GUI installer wizard
-  without a console window and triggered the corrected release run.
-- Next action: Inspect completed run `33984373395` and the published assets.
-- Changed files: `tool/package_windows_release.ps1`, changelog, and this
-  checkpoint.
-- CI result: The setup launcher now compiles as a WinForms `winexe`; it shows
-  an installation-folder wizard, optional Start Menu shortcut and launch
-  choices, progress state, completion dialog, and error dialogs.
+- Active task: Replaced the unsigned custom Windows setup EXE with an
+  antivirus-safe script-based GUI setup bundle.
+- Next action: Verify the setup ZIP and publish the corrected release commit
+  and tag.
+- Changed files: `.github/workflows/release.yml`,
+  `tool/package_windows_release.ps1`, `tool/Install-Spull.ps1`,
+  `tool/Install-Spull.vbs`, README, changelog, and this checkpoint.
+- CI result: Windows releases now publish the portable ZIP plus
+  `spull-windows-x86_64-setup.zip`; users extract it and double-click the
+  hidden PowerShell launcher to open the GUI installer without a custom EXE.
 - Catalog result: The support panel runs `yt-dlp --list-extractors`, displays
   every returned extractor in a scrollable list, supports case-insensitive
   search, and carries `(CURRENTLY BROKEN)` markers into the UI status.
@@ -19,14 +21,13 @@
   - A clean Windows release build passed, then
     `dart run tool/verify_desktop_artifact.dart windows` found the executable,
     Flutter DLL, engine data, and asset manifest.
-  - The updated Windows package script compiled the setup launcher and created
-    the portable ZIP and GUI setup EXE.
-  - The setup EXE passed PE validation with Windows GUI subsystem `2`; no
-    console subsystem is present.
-  - The setup payload was inspected and contains the complete Flutter runtime.
+  - The setup package now contains `Install-Spull.vbs`,
+    `Install-Spull.ps1`, and the complete runtime ZIP.
+  - The VBS launcher starts Windows PowerShell hidden; the installer itself
+    presents the folder, shortcut, progress, completion, and error dialogs.
+  - Portable ZIP and setup ZIP packaging passed locally.
   - `dart run tool/verify.dart` passed: formatting, analyzer, and widget tests.
   - `dart run tool/verify_desktop_artifact.dart windows` passed.
   - Release workflow YAML parsed successfully and `git diff --check` passed.
-  - The release publisher checks out source before
-    `gh release create --verify-tag`.
-- GitHub Actions run `33984373395` is queued for tag `release-v1.2.0`.
+- Blockers: the corrected release run must finish on GitHub Actions before the
+  new assets are published.

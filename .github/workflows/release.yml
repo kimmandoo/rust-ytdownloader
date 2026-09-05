@@ -80,7 +80,7 @@ jobs:
             bundle_path: build/windows/x64/runner/Release
             artifact_name: spull-windows-x86_64
             asset_name: spull-windows-x86_64.zip
-            setup_asset_name: spull-windows-x86_64-setup.exe
+            setup_asset_name: spull-windows-x86_64-setup.zip
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -170,7 +170,7 @@ jobs:
           assets=(release-assets/*)
           test "${#assets[@]}" -eq 4
           test -f release-assets/spull-windows-x86_64.zip
-          test -f release-assets/spull-windows-x86_64-setup.exe
+          test -f release-assets/spull-windows-x86_64-setup.zip
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
