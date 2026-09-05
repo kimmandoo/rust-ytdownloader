@@ -38,6 +38,7 @@ jobs:
           ## Spull Flutter Release
 
           A Dart + Flutter desktop media downloader for Windows, macOS, and Linux.
+          Release assets include the complete runnable desktop bundles, not only the platform executables.
 
           macOS artifacts are ad-hoc signed for local distribution. They are not notarized.
           EOF
@@ -54,8 +55,8 @@ jobs:
           - name: Windows x86_64
             os: windows-latest
             target: windows
-            artifact: build/windows/x64/runner/Release/spull.exe
-            asset_name: spull-windows-x86_64.exe
+            artifact: build/windows/x64/runner/Release
+            asset_name: spull-windows-x86_64.zip
           - name: Linux x86_64
             os: ubuntu-latest
             target: linux
@@ -93,7 +94,9 @@ jobs:
         run: |
           test -e "${ARTIFACT}"
           mkdir -p release-assets
-          if [[ "${ASSET_NAME}" == *.zip ]]; then
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            powershell -NoProfile -Command "Compress-Archive -Path '${ARTIFACT}/*' -DestinationPath 'release-assets/${ASSET_NAME}' -Force"
+          elif [[ "${ASSET_NAME}" == *.zip ]]; then
             ditto -c -k --sequesterRsrc --keepParent "${ARTIFACT}" "release-assets/${ASSET_NAME}"
           elif [[ "${ASSET_NAME}" == *.tar.gz ]]; then
             tar -czf "release-assets/${ASSET_NAME}" -C "$(dirname "${ARTIFACT}")" "$(basename "${ARTIFACT}")"

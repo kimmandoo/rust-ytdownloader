@@ -1,14 +1,12 @@
 # Work checkpoint
 
-- Active task: Completed packaged-logo verification and removed the Intel macOS CI matrix job.
-- Next action: None for this session; the verified working tree is ready to commit and push.
-- Changed files: Release CI matrix, changelog, checkpoint, and no logo source files; all existing source and built Windows bundle logos were audited.
-- Artifact result: `assets/spull_logo.svg`, `assets/spull_logo_1024.png`, every macOS app icon size, the Windows multi-size ICO, and the built Windows Flutter asset all carry the muted sage logo color with transparent backgrounds.
-- CI result: Release builds now target Windows x86_64, Linux x86_64, and macOS Apple Silicon; the Intel macOS artifact was removed.
+- Active task: Repaired the incomplete Windows release artifact; the dynamic yt-dlp extractor catalog remains the next implementation task.
+- Next action: Implement dynamic extractor discovery and searchable rendering from `yt-dlp --list-extractors`.
+- Changed files: Windows release packaging workflow, release documentation, changelog, and this checkpoint.
+- CI result: The Windows matrix now archives the complete `build/windows/x64/runner/Release` directory as `spull-windows-x86_64.zip`; Linux remains a complete tarball and macOS remains a complete app archive.
 - Verification:
-  - Logo verifier found zero old fluorescent mint pixels in all PNG/ICO assets.
-  - `cmp` confirmed the built Windows bundle SVG matches the source SVG.
-  - `file` confirmed the Windows ICO contains six PNG icon entries.
-  - Release workflow YAML parsed successfully after the matrix change.
+  - Windows archive smoke contained `spull.exe`, `data/`, and `flutter_windows.dll` after extraction.
+  - Release workflow YAML parsed successfully.
+  - Intel macOS matrix removal remains intact.
   - `git diff --check` passed before commit.
-- Blockers: macOS Apple Silicon and Linux native compilation require their respective CI runners; this Windows host cannot execute those platform builds.
+- Blockers: The dynamic extractor catalog is not implemented yet; Linux and macOS native builds require their respective CI runners.

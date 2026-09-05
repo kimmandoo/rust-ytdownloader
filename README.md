@@ -51,6 +51,7 @@ flutter build linux --release
 ```
 
 The Linux release artifact is a `.tar.gz` containing the relocatable Flutter bundle; extract it and run `bundle/spull`.
+The Windows release artifact is a `.zip` containing `spull.exe`, `data/`, and `flutter_windows.dll`; extract the full archive before launching.
 
 The macOS Release configuration uses `CODE_SIGN_IDENTITY = -` and disables provisioning-profile requirements, producing an ad-hoc signed app suitable for local distribution. It is not notarized and cannot be used as a Mac App Store submission. See [`macos/ExportOptions.plist`](macos/ExportOptions.plist).
 
