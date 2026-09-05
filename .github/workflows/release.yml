@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 env:
-  CARGO_TERM_COLOR: always
+  FLUTTER_CHANNEL: stable
   GH_REPO: ${{ github.repository }}
 
 jobs:
@@ -19,178 +19,87 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Get version from Cargo.toml
-        id: get_version
-        run: |
-          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
       - name: Generate release tag
         id: tag
+        shell: bash
         run: |
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          TAG="v${{ steps.get_version.outputs.version }}-${{ github.run_number }}-${SHORT_SHA}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
+          VERSION=$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml | head -1)
+          SHORT_SHA=$(printf '%s' "${GITHUB_SHA}" | cut -c1-7)
+          echo "tag=v${VERSION}-${GITHUB_RUN_NUMBER}-${SHORT_SHA}" >> "${GITHUB_OUTPUT}"
       - name: Create draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          retry() {
-            delay=3
-            for attempt in 1 2 3 4 5; do
-              "$@" && return 0
-              if [ "$attempt" = 5 ]; then
-                return 1
-              fi
-              sleep "$delay"
-              delay=$((delay * 2))
-            done
-          }
-
           cat > release-notes.md <<'EOF'
-          ## Auto Release
+          ## Spull Flutter Release
 
-          **Commit:** `${{ github.sha }}`
-          **Message:** ${{ github.event.head_commit.message }}
-          **Author:** ${{ github.event.head_commit.author.name }}
-          **Date:** ${{ github.event.head_commit.timestamp }}
+          A Dart + Flutter desktop build with the pixel-art Media Quest interface.
 
-          ### Downloads
-
-          | Platform | File |
-          |----------|------|
-          | Windows x86_64 | `spull-windows-x86_64.exe` |
-          | macOS Intel | `spull-macos-x86_64.app.zip` |
-          | macOS Apple Silicon | `spull-macos-aarch64.app.zip` |
+          macOS artifacts are ad-hoc signed for local distribution. They are not notarized.
           EOF
-
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            retry gh release edit "$TAG" --draft=true --prerelease=false --notes-file release-notes.md
-          else
-            retry gh release create "$TAG" --draft --title "Release $TAG" --notes-file release-notes.md
-          fi
+          gh release create "${TAG}" --draft --title "Release ${TAG}" --notes-file release-notes.md
 
   build:
-    name: Build ${{ matrix.target }}
+    name: Build ${{ matrix.name }}
     needs: prepare-release
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            build_args: --target x86_64-pc-windows-msvc --no-bundle
-            artifact_glob: src-tauri/target/x86_64-pc-windows-msvc/release/spull-tauri.exe
+          - name: Windows x86_64
+            os: windows-latest
+            target: windows
+            artifact: build/windows/x64/runner/Release/spull.exe
             asset_name: spull-windows-x86_64.exe
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            build_args: --target x86_64-apple-darwin --bundles app
-            artifact_glob: src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app
+          - name: macOS Intel
+            os: macos-13
+            target: macos
+            artifact: build/macos/Build/Products/Release/spull.app
             asset_name: spull-macos-x86_64.app.zip
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            build_args: --target aarch64-apple-darwin --bundles app
-            artifact_glob: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+          - name: macOS Apple Silicon
+            os: macos-latest
+            target: macos
+            artifact: build/macos/Build/Products/Release/spull.app
             asset_name: spull-macos-aarch64.app.zip
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install macOS dependencies
-        if: runner.os == 'macOS'
-        run: |
-          brew update
-          brew install openssl pkg-config
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          targets: ${{ matrix.target }}
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-          workspaces: |
-            src-tauri -> target
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build release bundle
-        shell: bash
-        run: |
-          retry() {
-            delay=10
-            for attempt in 1 2 3; do
-              "$@" && return 0
-              if [ "$attempt" = 3 ]; then
-                return 1
-              fi
-              sleep "$delay"
-              delay=$((delay * 2))
-            done
-          }
-
-          retry npm run tauri build -- ${{ matrix.build_args }}
-
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+      - name: Enable desktop target
+        run: flutter config --enable-${{ matrix.target }}-desktop
+      - name: Install Dart packages
+        run: flutter pub get
+      - name: Build Flutter release
+        run: flutter build ${{ matrix.target }} --release
       - name: Prepare release asset
         shell: bash
         env:
-          ASSET_GLOB: ${{ matrix.artifact_glob }}
+          ARTIFACT: ${{ matrix.artifact }}
           ASSET_NAME: ${{ matrix.asset_name }}
         run: |
-          shopt -s nullglob
-          matches=($ASSET_GLOB)
-          if [ "${#matches[@]}" -ne 1 ]; then
-            printf 'Expected exactly one artifact for %s, found %s\n' "$ASSET_GLOB" "${#matches[@]}"
-            printf '%s\n' "${matches[@]}"
-            exit 1
-          fi
-
+          test -e "${ARTIFACT}"
           mkdir -p release-assets
-          if [[ "$ASSET_NAME" == *.zip ]]; then
-            ditto -c -k --sequesterRsrc --keepParent "${matches[0]}" "release-assets/$ASSET_NAME"
+          if [[ "${ASSET_NAME}" == *.zip ]]; then
+            ditto -c -k --sequesterRsrc --keepParent "${ARTIFACT}" "release-assets/${ASSET_NAME}"
           else
-            cp "${matches[0]}" "release-assets/$ASSET_NAME"
+            cp "${ARTIFACT}" "release-assets/${ASSET_NAME}"
           fi
-
-      - name: Upload release asset to draft release
+      - name: Upload release asset
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare-release.outputs.tag }}
           ASSET_NAME: ${{ matrix.asset_name }}
-        run: |
-          retry() {
-            delay=3
-            for attempt in 1 2 3 4 5; do
-              "$@" && return 0
-              if [ "$attempt" = 5 ]; then
-                return 1
-              fi
-              sleep "$delay"
-              delay=$((delay * 2))
-            done
-          }
-
-          test -f "release-assets/$ASSET_NAME"
-          retry gh release upload "$TAG" "release-assets/$ASSET_NAME" --clobber
+        run: gh release upload "${TAG}" "release-assets/${ASSET_NAME}" --clobber
 
   publish-release:
     name: Publish release
@@ -198,24 +107,9 @@ jobs:
       - prepare-release
       - build
     runs-on: ubuntu-latest
-
     steps:
       - name: Publish draft release
-        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare-release.outputs.tag }}
-        run: |
-          retry() {
-            delay=3
-            for attempt in 1 2 3 4 5; do
-              "$@" && return 0
-              if [ "$attempt" = 5 ]; then
-                return 1
-              fi
-              sleep "$delay"
-              delay=$((delay * 2))
-            done
-          }
-
-          retry gh release edit "$TAG" --draft=false --prerelease=false
+        run: gh release edit "${TAG}" --draft=false --prerelease=false

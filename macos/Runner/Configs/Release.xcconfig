@@ -1,0 +1,10 @@
+#include "../../Flutter/Flutter-Release.xcconfig"
+#include "Warnings.xcconfig"
+// Ad-hoc macOS distribution: no Apple Developer provisioning profile required.
+CODE_SIGNING_ALLOWED = YES
+CODE_SIGNING_REQUIRED = NO
+CODE_SIGN_IDENTITY = -
+CODE_SIGN_STYLE = Manual
+DEVELOPMENT_TEAM =
+PROVISIONING_PROFILE_SPECIFIER =
+OTHER_CODE_SIGN_FLAGS = --timestamp=none
