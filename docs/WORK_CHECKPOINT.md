@@ -1,9 +1,8 @@
 # Work checkpoint
 
 - Active task: Converted the Windows setup asset into a GUI installer wizard
-  without a console window.
-- Next action: Create the republish release commit, move `release-v1.2.0` to
-  it, and push the corrected commit and tag.
+  without a console window and triggered the corrected release run.
+- Next action: Inspect completed run `33984373395` and the published assets.
 - Changed files: `tool/package_windows_release.ps1`, changelog, and this
   checkpoint.
 - CI result: The setup launcher now compiles as a WinForms `winexe`; it shows
@@ -28,7 +27,6 @@
   - `dart run tool/verify.dart` passed: formatting, analyzer, and widget tests.
   - `dart run tool/verify_desktop_artifact.dart windows` passed.
   - Release workflow YAML parsed successfully and `git diff --check` passed.
-  - The release publisher now checks out source before
-    `gh release create --verify-tag`; run `33984088001` is in progress.
-- Blockers: the external release run must finish on Linux/macOS/Windows
-  runners before the assets are published.
+  - The release publisher checks out source before
+    `gh release create --verify-tag`.
+- GitHub Actions run `33984373395` is queued for tag `release-v1.2.0`.
