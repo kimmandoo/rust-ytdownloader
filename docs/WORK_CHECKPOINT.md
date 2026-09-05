@@ -1,9 +1,8 @@
 # Work checkpoint
 
-- Active task: Fixed the release publisher's missing repository checkout, which
-  caused `gh release create --verify-tag` to fail outside a Git worktree.
-- Next action: Create the republish release commit, move `release-v1.2.0` to
-  it, and push the corrected commit and tag.
+- Active task: Fixed the release publisher's missing repository checkout and
+  triggered the corrected release run.
+- Next action: Inspect completed run `33984088001` and the published assets.
 - Changed files: `.github/workflows/release.yml`, changelog, and this
   checkpoint.
   directly, avoiding unsupported PowerShell 7 `Add-Type -OutputType` values.
@@ -34,4 +33,4 @@
   - The previous publisher failure was reproduced by its log: no checkout left
     the release job outside a Git repository; the publisher now checks out the
     source before invoking `gh release create --verify-tag`.
-- Blockers: the corrected release tag run is still pending.
+- GitHub Actions run `33984088001` is queued for tag `release-v1.2.0`.
