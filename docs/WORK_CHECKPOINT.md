@@ -1,9 +1,8 @@
 # Work checkpoint
 
-- Active task: Corrected the invalid pinned Flutter action SHA that blocked all
-  release matrix jobs before they started.
-- Next action: Create the republish release commit, move `release-v1.2.0` to
-  it, and push the corrected commit and tag.
+- Active task: Corrected the invalid pinned Flutter action SHA and triggered the
+  republish workflow successfully.
+- Next action: Inspect the completed GitHub Actions run and published assets.
 - Changed files: `.github/workflows/release.yml`, changelog, and this
   checkpoint.
 - CI result: The Flutter action now uses the resolvable `v2` commit
@@ -29,5 +28,7 @@
   - Release workflow YAML parsed successfully and `git diff --check` passed.
   - Corrected workflow YAML parsed successfully, and the action SHA matched the
     remote `subosito/flutter-action` `v2` tag.
-- Blockers: Linux and macOS native builds require their respective CI runners;
-  this Windows host cannot execute those platform builds.
+  - GitHub Actions run `33983192239` started from `00d10b3`; all three verify
+    jobs reached `Set up Flutter`, confirming that the action pin resolves.
+- Blockers: the release workflow is still in progress; Linux and macOS native
+  builds require their respective CI runners.
