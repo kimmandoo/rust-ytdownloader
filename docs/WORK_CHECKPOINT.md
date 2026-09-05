@@ -1,9 +1,8 @@
 # Work checkpoint
 
-- Active task: Repaired the PowerShell 7 Windows setup compilation failure and
-  corrected Linux artifact verification.
-- Next action: Create the republish release commit, move `release-v1.2.0` to
-  it, and push the corrected commit and tag.
+- Active task: Corrected the PowerShell 7 Windows setup compilation failure
+  and Linux artifact verification, then triggered the corrected release run.
+- Next action: Inspect the completed run `33983711842` and published assets.
 - Changed files: `.github/workflows/release.yml`,
   `tool/package_windows_release.ps1`, `tool/verify_desktop_artifact.dart`,
   changelog, and this checkpoint.
@@ -33,5 +32,5 @@
     incorrectly required Windows-only `data/app.so`; the verifier now matches
     Linux's `data/flutter_assets` layout.
   - Release workflow YAML parsed successfully and `git diff --check` passed.
-- Blockers: the corrected release workflow requires a new tag-triggered run;
-  Linux and macOS native builds remain delegated to GitHub Actions.
+  - GitHub Actions run `33983711842` is queued/in progress for tag
+    `release-v1.2.0`; Linux and macOS native builds remain delegated to Actions.
