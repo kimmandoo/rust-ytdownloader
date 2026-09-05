@@ -1,16 +1,15 @@
 # Work checkpoint
 
-- Active task: Added a self-extracting Windows setup executable alongside the
-  portable release archive.
-- Next action: Create the release commit, tag it as `release-v1.2.0`, and push
-  the commit plus tag.
-- Changed files: `.github/workflows/release.yml`,
-  `tool/package_windows_release.ps1`, README, changelog, and this checkpoint.
-- CI result: GitHub Actions now runs only for `release-*` tags or manual
-  dispatch, validates `release(scope):` commit subjects, pins Flutter/action
-  dependencies, verifies all three desktop bundles before packaging, and
-  publishes four assets after all matrix builds pass: Linux tarball, macOS app
-  archive, Windows portable ZIP, and Windows setup executable.
+- Active task: Corrected the invalid pinned Flutter action SHA that blocked all
+  release matrix jobs before they started.
+- Next action: Create the republish release commit, move `release-v1.2.0` to
+  it, and push the corrected commit and tag.
+- Changed files: `.github/workflows/release.yml`, changelog, and this
+  checkpoint.
+- CI result: The Flutter action now uses the resolvable `v2` commit
+  `1a449444c387b1966244ae4d4f8c696479add0b2`; the workflow still publishes
+  the portable Windows ZIP and setup executable plus the Linux and macOS
+  artifacts.
 - Catalog result: The support panel runs `yt-dlp --list-extractors`, displays
   every returned extractor in a scrollable list, supports case-insensitive
   search, and carries `(CURRENTLY BROKEN)` markers into the UI status.
@@ -28,5 +27,7 @@
   - `spull.exe` launch smoke stayed alive for five seconds with the complete
     runtime.
   - Release workflow YAML parsed successfully and `git diff --check` passed.
+  - Corrected workflow YAML parsed successfully, and the action SHA matched the
+    remote `subosito/flutter-action` `v2` tag.
 - Blockers: Linux and macOS native builds require their respective CI runners;
   this Windows host cannot execute those platform builds.

@@ -3,6 +3,8 @@
 ## 2026-09-06
 - fix(ci): aligned desktop verification with the release-tag workflow, pinned
   Flutter and GitHub Actions dependencies, and rejected incomplete runtime bundles.
+- fix(ci): corrected the pinned Flutter action commit so release jobs can
+  resolve the setup action.
 - feat(release): added a self-extracting Windows setup executable alongside
   the portable ZIP release.
 
