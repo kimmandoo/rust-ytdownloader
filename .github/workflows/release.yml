@@ -61,11 +61,6 @@ jobs:
             target: linux
             artifact: build/linux/x64/release/bundle
             asset_name: spull-linux-x86_64.tar.gz
-          - name: macOS Intel
-            os: macos-13
-            target: macos
-            artifact: build/macos/Build/Products/Release/spull.app
-            asset_name: spull-macos-x86_64.app.zip
           - name: macOS Apple Silicon
             os: macos-latest
             target: macos

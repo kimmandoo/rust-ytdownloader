@@ -1,23 +1,14 @@
 # Work checkpoint
 
-- Active task: Completed Linux desktop support, CI packaging, muted branding, and download-folder UX improvements.
-- Next action: None for this session; the verified working tree is committed in `d8939c2`.
-- Changed files: Generated `linux/` Flutter target, Linux CI/release packaging, Linux bootstrap logic, folder persistence and panel UI, muted pixel palette and raster icons, README, metadata, changelog, and widget smoke coverage.
-- Linux result: Added the GTK runner with `com.spull.desktop`, registered `file_selector_linux`, packaged the relocatable bundle as `spull-linux-x86_64.tar.gz`, and added Linux-native build dependencies to release CI.
-- Bootstrap result: Added Linux Deno downloads and architecture-aware static ffmpeg tar.xz downloads, including in-app tar.xz extraction and executable permission setup.
-- Folder result: Fresh installs create and persist `~/Downloads` (or the platform home Downloads path), while the dashboard now presents destination setup before the URL queue.
-- Visual result: Replaced fluorescent mint `#69B89F`/`#7EE6C4` accents with muted `#4F7565`/`#8DAA9D` tones and regenerated transparent app icons.
-- History result: Existing local commit subjects remain normalized to `type(scope): subject`; the remote-tracking branch remains unchanged because no push was requested.
+- Active task: Completed packaged-logo verification and removed the Intel macOS CI matrix job.
+- Next action: None for this session; the verified working tree is ready to commit and push.
+- Changed files: Release CI matrix, changelog, checkpoint, and no logo source files; all existing source and built Windows bundle logos were audited.
+- Artifact result: `assets/spull_logo.svg`, `assets/spull_logo_1024.png`, every macOS app icon size, the Windows multi-size ICO, and the built Windows Flutter asset all carry the muted sage logo color with transparent backgrounds.
+- CI result: Release builds now target Windows x86_64, Linux x86_64, and macOS Apple Silicon; the Intel macOS artifact was removed.
 - Verification:
-  - `dart format lib test` completed.
-  - `flutter analyze` passed with no issues.
-  - `flutter test` passed.
-  - `flutter build windows --release` produced `build/windows/x64/runner/Release/spull.exe`.
-  - The Windows Release app launched successfully through Flutter's desktop runner readiness check.
-  - Folder-settings smoke confirmed default Downloads creation, persistence, and reload.
-  - Linux tarball packaging smoke produced `bundle/spull`.
-  - Linux ffmpeg, Deno x86_64, ffmpeg ARM64, and Deno ARM64 bootstrap URLs returned HTTP 200.
-  - Release workflow YAML parsed successfully.
-  - Raster icon verification found zero old fluorescent pixels and retained transparent backgrounds.
-  - `git diff --check` passed before the final commit; the post-commit working tree is clean.
-- Blockers: Linux native compilation was not run on the Windows host; GitHub Actions now performs the Linux build with GTK dependencies. macOS Xcode compilation was also not run on this host.
+  - Logo verifier found zero old fluorescent mint pixels in all PNG/ICO assets.
+  - `cmp` confirmed the built Windows bundle SVG matches the source SVG.
+  - `file` confirmed the Windows ICO contains six PNG icon entries.
+  - Release workflow YAML parsed successfully after the matrix change.
+  - `git diff --check` passed before commit.
+- Blockers: macOS Apple Silicon and Linux native compilation require their respective CI runners; this Windows host cannot execute those platform builds.

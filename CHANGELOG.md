@@ -14,3 +14,4 @@
 - refactor(folder): defaulted fresh installs to Downloads and made folder selection reopen at the current path.
 - refactor(ui): moved download-folder setup into a dedicated destination panel with clear change and open actions.
 - refactor(branding): replaced fluorescent mint accents in the UI and raster app icons with a muted sage tone.
+- ci(release): removed the Intel macOS matrix job and retained Apple Silicon, Windows, and Linux artifacts.
