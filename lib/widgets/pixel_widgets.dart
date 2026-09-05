@@ -2,18 +2,21 @@ import 'package:flutter/material.dart';
 
 class PixelColors {
   static const ink = Color(0xFF17162A);
-  static const background = Color(0xFFFFF4D1);
-  static const panel = Color(0xFFFFE5D1);
-  static const panelLight = Color(0xFFFFF9EE);
-  static const outline = Color(0xFFD18472);
+  static const background = Color(0xFFECE3D8);
+  static const panel = Color(0xFFE2D7CC);
+  static const panelLight = Color(0xFFF4ECE2);
+  static const outline = Color(0xFFB47A6E);
   static const cream = Color(0xFFFFF4D1);
-  static const text = Color(0xFF17162A);
-  static const muted = Color(0xFF806B7C);
-  static const orange = Color(0xFFFF9F68);
-  static const yellow = Color(0xFFFFD166);
-  static const mint = Color(0xFF7EE6C4);
-  static const pink = Color(0xFFFF7891);
-  static const sky = Color(0xFFFFC8A8);
+  static const text = Color(0xFF2A2037);
+  static const muted = Color(0xFF766B78);
+  static const orange = Color(0xFFE28A66);
+  static const yellow = Color(0xFFD4AD55);
+  static const mint = Color(0xFF69B89F);
+  static const pink = Color(0xFFD86D82);
+  static const sky = Color(0xFFCE9A82);
+  static const logoOrange = Color(0xFFFF9F68);
+  static const logoMint = Color(0xFF7EE6C4);
+  static const logoPink = Color(0xFFFF7891);
 }
 
 class PixelPanel extends StatelessWidget {
@@ -33,11 +36,11 @@ class PixelPanel extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color,
-        border: Border.all(color: PixelColors.outline, width: 2),
+        border: Border.all(color: PixelColors.outline, width: 1),
         boxShadow: const <BoxShadow>[
           BoxShadow(
             color: PixelColors.outline,
-            offset: Offset(3, 3),
+            offset: Offset(2, 2),
             blurRadius: 0,
           ),
         ],
@@ -114,13 +117,13 @@ class PixelButton extends StatelessWidget {
             color: enabled && tone != PixelButtonTone.ghost
                 ? baseBackground
                 : PixelColors.outline,
-            width: 2,
+            width: 1,
           ),
           boxShadow: enabled
               ? const <BoxShadow>[
                   BoxShadow(
                     color: PixelColors.outline,
-                    offset: Offset(2, 2),
+                    offset: Offset(1, 1),
                     blurRadius: 0,
                   ),
                 ]
@@ -182,7 +185,6 @@ class PixelLogo extends StatelessWidget {
 
 class PixelProgressBar extends StatelessWidget {
   const PixelProgressBar({super.key, required this.value, this.height = 14});
-
   final double value;
   final double height;
 
@@ -239,16 +241,16 @@ class _PixelLogoPainter extends CustomPainter {
       );
     }
 
-    // Transparent pixel mascot mark.
+    // Transparent pixel logo mark.
     block(3, 0, 3, 1, PixelColors.ink);
     block(10, 0, 3, 1, PixelColors.ink);
     block(2, 1, 5, 4, PixelColors.ink);
     block(9, 1, 5, 4, PixelColors.ink);
     block(1, 4, 14, 9, PixelColors.ink);
     block(3, 13, 10, 2, PixelColors.ink);
-    block(3, 2, 3, 3, PixelColors.orange);
-    block(10, 2, 3, 3, PixelColors.orange);
-    block(2, 5, 12, 7, PixelColors.orange);
+    block(3, 2, 3, 3, PixelColors.logoOrange);
+    block(10, 2, 3, 3, PixelColors.logoOrange);
+    block(2, 5, 12, 7, PixelColors.logoOrange);
     block(4, 7, 2, 2, PixelColors.ink);
     block(10, 7, 2, 2, PixelColors.ink);
     block(5, 7, 1, 1, PixelColors.cream);
@@ -256,10 +258,10 @@ class _PixelLogoPainter extends CustomPainter {
     block(2, 9, 2, 1, PixelColors.cream);
     block(12, 9, 2, 1, PixelColors.cream);
     block(5, 9, 6, 3, PixelColors.cream);
-    block(7, 10, 2, 1, PixelColors.pink);
+    block(7, 10, 2, 1, PixelColors.logoPink);
     block(6, 11, 1, 1, PixelColors.ink);
     block(9, 11, 1, 1, PixelColors.ink);
-    block(5, 13, 6, 1, PixelColors.mint);
+    block(5, 13, 6, 1, PixelColors.logoMint);
   }
 
   @override

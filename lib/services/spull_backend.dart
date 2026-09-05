@@ -597,7 +597,7 @@ class SpullBackend {
         '--convert-thumbnails',
         'jpg',
         '--ppa',
-        r'ThumbnailsConvertor+ffmpeg_o:-vf crop=min(iw\,ih):min(iw\,ih) -q:v 1',
+        r'ThumbnailsConvertor+ffmpeg_o:-vf crop=min(iw\\,ih):min(iw\\,ih) -q:v 1',
       ]);
     } else if (settings.format == DownloadFormat.mp4) {
       args.addAll(<String>[
