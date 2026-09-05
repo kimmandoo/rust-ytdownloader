@@ -1,9 +1,8 @@
 # Work checkpoint
 
 - Active task: Replaced the unsigned custom Windows setup EXE with an
-  antivirus-safe script-based GUI setup bundle.
-- Next action: Verify the setup ZIP and publish the corrected release commit
-  and tag.
+  antivirus-safe script-based GUI setup bundle and triggered the corrected run.
+- Next action: Inspect completed run `33984730323` and the published assets.
 - Changed files: `.github/workflows/release.yml`,
   `tool/package_windows_release.ps1`, `tool/Install-Spull.ps1`,
   `tool/Install-Spull.vbs`, README, changelog, and this checkpoint.
@@ -29,5 +28,4 @@
   - `dart run tool/verify.dart` passed: formatting, analyzer, and widget tests.
   - `dart run tool/verify_desktop_artifact.dart windows` passed.
   - Release workflow YAML parsed successfully and `git diff --check` passed.
-- Blockers: the corrected release run must finish on GitHub Actions before the
-  new assets are published.
+- GitHub Actions run `33984730323` is queued for tag `release-v1.2.0`.
