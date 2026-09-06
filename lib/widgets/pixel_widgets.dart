@@ -185,7 +185,8 @@ class PixelLogo extends StatelessWidget {
 
 class PixelProgressBar extends StatelessWidget {
   const PixelProgressBar({super.key, required this.value, this.height = 14});
-  final double value;
+
+  final double? value;
   final double height;
 
   @override
@@ -197,21 +198,27 @@ class PixelProgressBar extends StatelessWidget {
         border: Border.all(color: PixelColors.outline, width: 2),
       ),
       padding: const EdgeInsets.all(3),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: FractionallySizedBox(
-          widthFactor: value.clamp(0, 1),
-          child: Container(
-            decoration: const BoxDecoration(color: PixelColors.mint),
-            child: Row(
-              children: List<Widget>.generate(
-                12,
-                (_) => const Expanded(child: SizedBox()),
+      child: value == null
+          ? const LinearProgressIndicator(
+              minHeight: 4,
+              backgroundColor: PixelColors.panel,
+              valueColor: AlwaysStoppedAnimation<Color>(PixelColors.mint),
+            )
+          : Align(
+              alignment: Alignment.centerLeft,
+              child: FractionallySizedBox(
+                widthFactor: value!.clamp(0, 1),
+                child: Container(
+                  decoration: const BoxDecoration(color: PixelColors.mint),
+                  child: Row(
+                    children: List<Widget>.generate(
+                      12,
+                      (_) => const Expanded(child: SizedBox()),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-      ),
     );
   }
 }

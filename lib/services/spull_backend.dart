@@ -11,9 +11,34 @@ import '../models/media_models.dart';
 ///
 /// It keeps the UI platform-neutral while delegating media work to the
 /// user-installed or app-local yt-dlp and ffmpeg executables.
+class SpullOperationCancelled implements Exception {
+  const SpullOperationCancelled(this.operation);
+
+  final String operation;
+
+  @override
+  String toString() => '$operation 작업을 취소했습니다.';
+}
+
+class SpullProcessTimeout implements Exception {
+  const SpullProcessTimeout(this.operation, this.timeout);
+
+  final String operation;
+  final Duration timeout;
+
+  @override
+  String toString() => '$operation 시간이 초과되었습니다 (${timeout.inSeconds}초).';
+}
+
 class SpullBackend {
   Process? _downloadProcess;
+  _ManagedProcess? _analysisProcess;
+  _ManagedProcess? _supportedSitesProcess;
   bool _stopRequested = false;
+
+  static const _analysisTimeout = Duration(seconds: 90);
+  static const _supportedSitesTimeout = Duration(seconds: 30);
+  static const _processTerminationTimeout = Duration(seconds: 2);
 
   Directory get dataDirectory {
     final environment = Platform.environment;
@@ -106,16 +131,26 @@ class SpullBackend {
         String tool,
         double base,
         double span,
-        double progress,
+        double? progress,
+        String details,
       ) {
-        final rounded = (progress * 100).floorToDouble();
-        if (lastProgress[tool] == rounded && progress < 1) return;
-        lastProgress[tool] = rounded;
+        final rounded = progress == null
+            ? null
+            : (progress * 100).floorToDouble();
+        if (rounded != null &&
+            progress != null &&
+            lastProgress[tool] == rounded &&
+            progress < 1) {
+          return;
+        }
+        if (rounded != null) lastProgress[tool] = rounded;
+        final progressLabel = rounded == null ? '진행 중' : '${rounded.round()}%';
+        final detailLabel = details.isEmpty ? '' : ' · $details';
         events.add(
           InitEvent(
             kind: InitKind.checking,
-            message: '$tool 자동 설치 중... ${rounded.round()}%',
-            percent: base + span * progress,
+            message: '$tool 자동 설치 중... $progressLabel$detailLabel',
+            percent: progress == null ? null : base + span * progress,
           ),
         );
       }
@@ -126,7 +161,8 @@ class SpullBackend {
       if (!ytdlpReady) {
         try {
           await _installYtdlp(
-            (progress) => reportDownload('yt-dlp', 12, 25, progress),
+            (progress, details) =>
+                reportDownload('yt-dlp', 12, 25, progress, details),
           );
           ytdlpReady = await _commandWorks(ytdlpExecutable, const [
             '--version',
@@ -167,7 +203,8 @@ class SpullBackend {
       if (!ffmpegReady) {
         try {
           await _installFfmpeg(
-            (progress) => reportDownload('ffmpeg', 48, 24, progress),
+            (progress, details) =>
+                reportDownload('ffmpeg', 48, 24, progress, details),
           );
           ffmpegReady = await _commandWorks(ffmpegExecutable, const [
             '-version',
@@ -206,7 +243,8 @@ class SpullBackend {
       if (!denoReady) {
         try {
           await _installDeno(
-            (progress) => reportDownload('Deno', 76, 18, progress),
+            (progress, details) =>
+                reportDownload('Deno', 76, 18, progress, details),
           );
           denoReady = await _commandWorks(denoExecutable, const ['--version']);
         } catch (_) {
@@ -239,7 +277,7 @@ class SpullBackend {
     }
   }
 
-  Future<void> _installYtdlp(void Function(double) onProgress) async {
+  Future<void> _installYtdlp(void Function(double?, String) onProgress) async {
     final destination = File(
       p.join(binDirectory.path, Platform.isWindows ? 'yt-dlp.exe' : 'yt-dlp'),
     );
@@ -249,7 +287,7 @@ class SpullBackend {
     await _markExecutable(destination);
   }
 
-  Future<void> _installFfmpeg(void Function(double) onProgress) async {
+  Future<void> _installFfmpeg(void Function(double?, String) onProgress) async {
     final linux = Platform.isLinux;
     final archiveFile = File(
       p.join(
@@ -282,7 +320,7 @@ class SpullBackend {
     }
   }
 
-  Future<void> _installDeno(void Function(double) onProgress) async {
+  Future<void> _installDeno(void Function(double?, String) onProgress) async {
     final archiveFile = File(p.join(binDirectory.path, '.deno-download.zip'));
     try {
       await _downloadAsset(await _denoUrl(), archiveFile, onProgress);
@@ -298,13 +336,15 @@ class SpullBackend {
   Future<void> _downloadAsset(
     String url,
     File destination,
-    void Function(double) onProgress,
+    void Function(double?, String) onProgress,
   ) async {
     final client = HttpClient()
       ..userAgent = 'Spull/1.2 (desktop media downloader)'
       ..connectionTimeout = const Duration(seconds: 20)
       ..idleTimeout = const Duration(seconds: 30);
     IOSink? sink;
+    final stopwatch = Stopwatch()..start();
+    var lastReportedAt = Duration.zero;
     try {
       final request = await client.getUrl(Uri.parse(url));
       request.followRedirects = true;
@@ -314,19 +354,71 @@ class SpullBackend {
       }
       await destination.parent.create(recursive: true);
       sink = destination.openWrite();
+      final totalBytes = response.contentLength > 0
+          ? response.contentLength
+          : null;
       var received = 0;
+      void report({bool force = false}) {
+        final elapsed = stopwatch.elapsed;
+        if (!force &&
+            elapsed - lastReportedAt < const Duration(milliseconds: 250)) {
+          return;
+        }
+        lastReportedAt = elapsed;
+        final bytesPerSecond = elapsed.inMilliseconds == 0
+            ? 0.0
+            : received / elapsed.inMilliseconds * 1000;
+        final progress = totalBytes == null
+            ? null
+            : (received / totalBytes).clamp(0.0, 1.0);
+        final details = totalBytes == null
+            ? '${_formatByteCount(received)} · ${_formatByteRate(bytesPerSecond)}'
+            : '${_formatByteRate(bytesPerSecond)} · 남은 시간 ${_formatDuration(_remainingDuration(totalBytes - received, bytesPerSecond))}';
+        onProgress(progress, details);
+      }
+
+      report(force: true);
       await for (final chunk in response) {
         sink.add(chunk);
         received += chunk.length;
-        if (response.contentLength > 0) {
-          onProgress(received / response.contentLength);
-        }
+        report();
       }
       await sink.flush();
+      report(force: true);
     } finally {
+      stopwatch.stop();
       await sink?.close();
       client.close(force: true);
     }
+  }
+
+  String _formatByteCount(num bytes) {
+    const units = <String>['B', 'KB', 'MB', 'GB'];
+    var value = bytes.toDouble();
+    var unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex += 1;
+    }
+    final digits = value >= 10 || unitIndex == 0 ? 0 : 1;
+    return '${value.toStringAsFixed(digits)} ${units[unitIndex]}';
+  }
+
+  String _formatByteRate(double bytesPerSecond) =>
+      '${_formatByteCount(bytesPerSecond)}/s';
+
+  Duration _remainingDuration(int remainingBytes, double bytesPerSecond) {
+    if (remainingBytes <= 0 || bytesPerSecond <= 0) return Duration.zero;
+    return Duration(
+      seconds: (remainingBytes / bytesPerSecond).ceil().clamp(0, 864000),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
   }
 
   Future<void> _extractZipBinary(File archiveFile, String targetName) async {
@@ -456,55 +548,163 @@ class SpullBackend {
     required String url,
     required AppSettings settings,
   }) async {
-    final args = <String>[
-      '--flat-playlist',
-      '-J',
-      '--no-warnings',
-      '--socket-timeout',
-      '30',
-      ..._cookieArguments(settings),
-      ..._runtimeArguments,
-      url,
-    ];
-    final result = await Process.run(
-      ytdlpExecutable,
-      args,
-      environment: _environment,
-      runInShell: true,
-    );
-    if (result.exitCode != 0) {
-      throw _formatAnalysisError('${result.stderr}');
-    }
+    final task = _ManagedProcess();
+    _analysisProcess = task;
     try {
-      final payload = jsonDecode('${result.stdout}');
-      if (payload is! Map<String, dynamic>) {
-        throw const FormatException('response is not an object');
+      final args = <String>[
+        '--flat-playlist',
+        '-J',
+        '--no-warnings',
+        '--socket-timeout',
+        '30',
+        ..._cookieArguments(settings),
+        ..._runtimeArguments,
+        url,
+      ];
+      final result = await _runYtdlp(
+        args: args,
+        task: task,
+        timeout: _analysisTimeout,
+        operation: '링크 분석',
+      );
+      if (result.exitCode != 0) {
+        throw _formatAnalysisError(result.stderr);
       }
-      return PlaylistInfo.fromJson(payload, sourceUrl: url);
-    } on FormatException catch (error) {
-      throw '영상 정보 JSON을 읽지 못했습니다: $error';
+      try {
+        final payload = jsonDecode(result.stdout);
+        if (payload is! Map<String, dynamic>) {
+          throw const FormatException('response is not an object');
+        }
+        return PlaylistInfo.fromJson(payload, sourceUrl: url);
+      } on FormatException catch (error) {
+        throw '영상 정보 JSON을 읽지 못했습니다: $error';
+      }
+    } finally {
+      if (identical(_analysisProcess, task)) _analysisProcess = null;
     }
   }
 
-  Future<SupportedSites> supportedSites() async {
-    final result = await Process.run(
-      ytdlpExecutable,
-      const <String>['--list-extractors'],
-      environment: _environment,
-      runInShell: true,
-    );
-    if (result.exitCode != 0) {
-      final details = '${result.stderr}'.trim();
-      throw details.isEmpty
-          ? 'yt-dlp extractor 목록을 가져오지 못했습니다.'
-          : 'yt-dlp extractor 목록을 가져오지 못했습니다: $details';
-    }
+  Future<void> cancelAnalysis() => _cancelManagedProcess(_analysisProcess);
 
-    final extractors = _parseExtractorList('${result.stdout}');
-    if (extractors.isEmpty) {
-      throw 'yt-dlp extractor 목록이 비어 있습니다.';
+  Future<SupportedSites> supportedSites() async {
+    final task = _ManagedProcess();
+    _supportedSitesProcess = task;
+    try {
+      final result = await _runYtdlp(
+        args: const <String>['--list-extractors'],
+        task: task,
+        timeout: _supportedSitesTimeout,
+        operation: 'extractor 목록 조회',
+      );
+      if (result.exitCode != 0) {
+        final details = result.stderr.trim();
+        throw details.isEmpty
+            ? 'yt-dlp extractor 목록을 가져오지 못했습니다.'
+            : 'yt-dlp extractor 목록을 가져오지 못했습니다: $details';
+      }
+
+      final extractors = _parseExtractorList(result.stdout);
+      if (extractors.isEmpty) {
+        throw 'yt-dlp extractor 목록이 비어 있습니다.';
+      }
+      return SupportedSites(extractors: extractors);
+    } finally {
+      if (identical(_supportedSitesProcess, task)) {
+        _supportedSitesProcess = null;
+      }
     }
-    return SupportedSites(extractors: extractors);
+  }
+
+  Future<void> cancelSupportedSites() =>
+      _cancelManagedProcess(_supportedSitesProcess);
+
+  Future<_YtdlpResult> _runYtdlp({
+    required List<String> args,
+    required _ManagedProcess task,
+    required Duration timeout,
+    required String operation,
+  }) async {
+    try {
+      final process = await Process.start(
+        ytdlpExecutable,
+        args,
+        environment: _environment,
+        runInShell: true,
+      );
+      task.process = process;
+      final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+      final stderrFuture = process.stderr.transform(utf8.decoder).join();
+      if (task.cancelRequested) await _terminateProcess(process);
+
+      int exitCode;
+      try {
+        exitCode = await process.exitCode.timeout(timeout);
+      } on TimeoutException {
+        await _terminateProcess(process);
+        await Future.wait(<Future<String>>[stdoutFuture, stderrFuture]);
+        if (task.cancelRequested) {
+          throw SpullOperationCancelled(operation);
+        }
+        throw SpullProcessTimeout(operation, timeout);
+      }
+      final output = await Future.wait(<Future<String>>[
+        stdoutFuture,
+        stderrFuture,
+      ]);
+      if (task.cancelRequested) {
+        throw SpullOperationCancelled(operation);
+      }
+      return _YtdlpResult(
+        exitCode: exitCode,
+        stdout: output[0],
+        stderr: output[1],
+      );
+    } finally {
+      task.process = null;
+      if (!task.completed.isCompleted) task.completed.complete();
+    }
+  }
+
+  Future<void> _cancelManagedProcess(_ManagedProcess? task) async {
+    if (task == null) return;
+    task.cancelRequested = true;
+    final process = task.process;
+    if (process != null) await _terminateProcess(process);
+    await task.completed.future;
+  }
+
+  Future<void> _terminateProcess(Process process) async {
+    if (Platform.isWindows) {
+      try {
+        final result = await Process.run('taskkill', <String>[
+          '/PID',
+          '${process.pid}',
+          '/T',
+          '/F',
+        ], runInShell: true);
+        if (result.exitCode != 0) process.kill(ProcessSignal.sigterm);
+      } catch (_) {
+        process.kill(ProcessSignal.sigterm);
+      }
+    } else {
+      // yt-dlp can have an ffmpeg child; stop both so a long encode cannot
+      // continue after the user cancels.
+      try {
+        await Process.run('pkill', <String>[
+          '-TERM',
+          '-P',
+          '${process.pid}',
+        ], runInShell: true);
+      } catch (_) {
+        // Some minimal environments do not ship pkill.
+      }
+      process.kill(ProcessSignal.sigterm);
+    }
+    try {
+      await process.exitCode.timeout(_processTerminationTimeout);
+    } on TimeoutException {
+      process.kill(ProcessSignal.sigkill);
+    }
   }
 
   List<SupportedSite> _parseExtractorList(String output) {
@@ -541,38 +741,7 @@ class SpullBackend {
     _stopRequested = true;
     final process = _downloadProcess;
     if (process == null) return;
-
-    if (Platform.isWindows) {
-      try {
-        final result = await Process.run('taskkill', <String>[
-          '/PID',
-          '${process.pid}',
-          '/T',
-          '/F',
-        ], runInShell: true);
-        if (result.exitCode != 0) process.kill(ProcessSignal.sigterm);
-      } catch (_) {
-        process.kill(ProcessSignal.sigterm);
-      }
-    } else {
-      // yt-dlp can have an ffmpeg child; stop both so a long encode cannot
-      // continue after the user presses ABORT.
-      try {
-        await Process.run('pkill', <String>[
-          '-TERM',
-          '-P',
-          '${process.pid}',
-        ], runInShell: true);
-      } catch (_) {
-        // Some minimal environments do not ship pkill.
-      }
-      process.kill(ProcessSignal.sigterm);
-    }
-    try {
-      await process.exitCode.timeout(const Duration(seconds: 2));
-    } on TimeoutException {
-      process.kill(ProcessSignal.sigkill);
-    }
+    await _terminateProcess(process);
   }
 
   Future<void> openFolder(String path) async {
@@ -922,4 +1091,22 @@ class SpullBackend {
     }
     return '영상 정보를 가져오지 못했습니다: $message';
   }
+}
+
+class _ManagedProcess {
+  final completed = Completer<void>();
+  Process? process;
+  bool cancelRequested = false;
+}
+
+class _YtdlpResult {
+  const _YtdlpResult({
+    required this.exitCode,
+    required this.stdout,
+    required this.stderr,
+  });
+
+  final int exitCode;
+  final String stdout;
+  final String stderr;
 }

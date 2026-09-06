@@ -1,6 +1,12 @@
 # Changelog
 
 ## 2026-09-06
+- feat(analysis): added yt-dlp process timeouts and cancellation controls for
+  link scans and extractor catalog loading.
+- fix(bootstrap): displayed indeterminate progress, transfer speed, and
+  remaining time when dependency downloads omit a total size.
+- docs(readme): redesigned the project guide around setup, releases, and
+  runtime behavior.
 - fix(ci): aligned desktop verification with the release-tag workflow, pinned
   Flutter and GitHub Actions dependencies, and rejected incomplete runtime bundles.
 - fix(ci): corrected the pinned Flutter action commit so release jobs can

@@ -188,6 +188,22 @@ class _SpullDashboardState extends State<_SpullDashboard> {
             ],
           ),
         ),
+        if (controller.phase == AppPhase.booting) ...<Widget>[
+          const SizedBox(height: 8),
+          PixelProgressBar(
+            value: controller.initIndeterminate
+                ? null
+                : controller.initPercent / 100,
+            height: 12,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            controller.initMessage,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: PixelColors.muted, fontSize: 9),
+          ),
+        ],
         const SizedBox(height: 16),
         const _SectionLabel('OUTPUT FORMAT'),
         const SizedBox(height: 9),
@@ -550,10 +566,23 @@ class _SpullDashboardState extends State<_SpullDashboard> {
 
   Widget _buildSupportPanel() {
     if (controller.supportLoading) {
-      return const PixelPanel(
-        child: Text(
-          'yt-dlp extractor 목록을 불러오는 중...',
-          style: TextStyle(color: PixelColors.muted, fontSize: 11),
+      return PixelPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            const Text(
+              'yt-dlp extractor 목록을 불러오는 중...',
+              style: TextStyle(color: PixelColors.muted, fontSize: 11),
+            ),
+            const SizedBox(height: 9),
+            PixelButton(
+              label: 'CANCEL',
+              icon: Icons.stop,
+              tone: PixelButtonTone.danger,
+              onPressed: controller.cancelSupportedSites,
+              expand: true,
+            ),
+          ],
         ),
       );
     }
@@ -833,6 +862,7 @@ class _SpullDashboardState extends State<_SpullDashboard> {
 
   Widget _buildUrlPanel() {
     final canEdit = controller.isReadyForInput && !controller.isBusy;
+    final isAnalyzing = controller.phase == AppPhase.analyzing;
     return PixelPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -859,17 +889,16 @@ class _SpullDashboardState extends State<_SpullDashboard> {
             alignment: WrapAlignment.spaceBetween,
             children: <Widget>[
               PixelButton(
-                label: 'ADD SLOT',
-                icon: Icons.add,
-                onPressed: canEdit ? controller.addUrlRow : null,
-              ),
-              PixelButton(
-                label: controller.phase == AppPhase.analyzing
-                    ? 'SCANNING...'
-                    : 'SCAN LINKS',
-                icon: Icons.radar,
-                tone: PixelButtonTone.primary,
-                onPressed: canEdit ? controller.analyze : null,
+                label: isAnalyzing ? 'CANCEL SCAN' : 'SCAN LINKS',
+                icon: isAnalyzing ? Icons.stop : Icons.radar,
+                tone: isAnalyzing
+                    ? PixelButtonTone.danger
+                    : PixelButtonTone.primary,
+                onPressed: isAnalyzing
+                    ? controller.cancelAnalyze
+                    : canEdit
+                    ? controller.analyze
+                    : null,
               ),
             ],
           ),

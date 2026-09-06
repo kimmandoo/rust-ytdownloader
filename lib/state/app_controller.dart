@@ -22,6 +22,7 @@ class SpullController extends ChangeNotifier {
   AppPhase phase = AppPhase.booting;
   String initMessage = '앱을 준비하는 중...';
   double initPercent = 0;
+  bool initIndeterminate = false;
   String errorMessage = '';
   String downloadMessage = '다운로드를 시작하면 진행률이 표시됩니다.';
   String downloadTitle = '';
@@ -37,6 +38,8 @@ class SpullController extends ChangeNotifier {
   Timer? _downloadClock;
   DateTime? _downloadStartedAt;
   Duration downloadElapsed = Duration.zero;
+  int _analysisRequestId = 0;
+  int _supportRequestId = 0;
   int _nextUrlId = 2;
 
   bool get hasDownloadableSelection => selectedEntries.isNotEmpty;
@@ -69,6 +72,7 @@ class SpullController extends ChangeNotifier {
     notifyListeners();
     await for (final event in _backend.initialize(settings.ytdlpChannel)) {
       initMessage = event.message;
+      initIndeterminate = event.percent == null;
       initPercent = event.percent ?? initPercent;
       if (event.kind == InitKind.ready || event.kind == InitKind.failed) {
         phase = AppPhase.idle;
@@ -161,6 +165,7 @@ class SpullController extends ChangeNotifier {
       return;
     }
 
+    final requestId = ++_analysisRequestId;
     phase = AppPhase.analyzing;
     playlist = null;
     errorMessage = '';
@@ -170,15 +175,25 @@ class SpullController extends ChangeNotifier {
     final results = <PlaylistInfo>[];
     final failures = <String>[];
     for (var index = 0; index < values.length; index += 1) {
+      if (requestId != _analysisRequestId) return;
       final value = values[index];
       final label = '${index + 1}/${values.length}';
       _log('[$label] 링크 분석 중: $value');
       notifyListeners();
       try {
         final info = await _backend.analyzeUrl(url: value, settings: settings);
+        if (requestId != _analysisRequestId) return;
         results.add(info);
         _log('[$label] 분석 완료: ${info.title}');
+      } on SpullOperationCancelled {
+        if (requestId == _analysisRequestId) {
+          phase = AppPhase.idle;
+          _log('분석을 취소했습니다.');
+          notifyListeners();
+        }
+        return;
       } catch (error) {
+        if (requestId != _analysisRequestId) return;
         final message = '[$label] 분석 실패: $error';
         failures.add(message);
         _log(message);
@@ -186,6 +201,7 @@ class SpullController extends ChangeNotifier {
       notifyListeners();
     }
 
+    if (requestId != _analysisRequestId) return;
     if (results.isEmpty) {
       phase = AppPhase.idle;
       errorMessage = failures.join('\n').isEmpty
@@ -229,6 +245,20 @@ class SpullController extends ChangeNotifier {
       errorMessage = '${failures.length}개 링크는 분석하지 못했습니다.';
     }
     notifyListeners();
+  }
+
+  Future<void> cancelAnalyze() async {
+    if (phase != AppPhase.analyzing) return;
+    _analysisRequestId++;
+    try {
+      await _backend.cancelAnalysis();
+    } finally {
+      if (phase == AppPhase.analyzing) {
+        phase = AppPhase.idle;
+        _log('분석을 취소했습니다.');
+        notifyListeners();
+      }
+    }
   }
 
   Future<void> startDownload() async {
@@ -306,15 +336,33 @@ class SpullController extends ChangeNotifier {
   }
 
   Future<void> _loadSupportedSites() async {
+    final requestId = ++_supportRequestId;
     supportLoading = true;
     supportError = '';
     notifyListeners();
     try {
-      sites = await _backend.supportedSites();
+      final loaded = await _backend.supportedSites();
+      if (requestId != _supportRequestId) return;
+      sites = loaded;
     } catch (error) {
+      if (requestId != _supportRequestId) return;
       supportError = '$error';
     } finally {
+      if (requestId == _supportRequestId) {
+        supportLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> cancelSupportedSites() async {
+    if (!supportLoading) return;
+    _supportRequestId++;
+    try {
+      await _backend.cancelSupportedSites();
+    } finally {
       supportLoading = false;
+      supportError = 'extractor 목록 로딩을 취소했습니다.';
       notifyListeners();
     }
   }
@@ -403,6 +451,8 @@ class SpullController extends ChangeNotifier {
     _downloadSubscription?.cancel();
     _stopDownloadClock();
     unawaited(_backend.stopDownload());
+    unawaited(_backend.cancelAnalysis());
+    unawaited(_backend.cancelSupportedSites());
     super.dispose();
   }
 }

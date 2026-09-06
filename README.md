@@ -1,38 +1,52 @@
 # Spull
 
 <p align="center">
-  <img src="assets/spull_logo.svg" alt="Spull transparent pixel logo" width="128" />
+  <img src="assets/spull_logo.svg" alt="Spull pixel logo" width="144" />
 </p>
 
-<p align="center"><strong>SPULL // MEDIA DOWNLOADER</strong><br />A clean 2D pixel desktop media downloader built entirely with Dart and Flutter.</p>
+<p align="center">
+  <strong>SPULL // MEDIA DOWNLOADER</strong><br />
+  A focused desktop media downloader powered by Flutter, Dart, and yt-dlp.
+</p>
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2A2037.svg" alt="MIT license" /></a>
+  <img src="https://img.shields.io/badge/Flutter-desktop-4F7565.svg" alt="Flutter desktop" />
+  <img src="https://img.shields.io/badge/Dart-3.13%2B-E28A66.svg" alt="Dart 3.13 or newer" />
+</p>
 
-## Features
+Spull turns one or more links into a selectable download queue. It keeps the interface quiet and predictable: inspect first, choose what to keep, then download to a folder you control.
 
-- Flutter desktop UI for Windows, macOS, and Linux with a 2D pixel visual language.
-- Dart backend that runs yt-dlp and ffmpeg as managed desktop processes.
-- Stable YouTube support plus experimental yt-dlp-compatible media sites.
-- Audio formats: MP3, WAV, M4A, FLAC. Video formats: MP4, WEBM.
-- Playlist analysis with per-item selection, live progress, logs, stop control, and output-folder shortcuts.
-- Live supported-extractor catalog loaded from the installed yt-dlp binary, with search and current-broken markers.
-- MP3 exports embed a high-quality center-cropped square album cover instead of leaving a sidecar image.
-- Long transfers keep resumable fragments, retry network fragments, trim path lengths, throttle UI events, and terminate child processes on cancel.
-- Browser-cookie and `cookies.txt` authentication options.
-- A transparent pixel logo and matching desktop app icons.
+## What it does
 
-## Development
+| Area | Behavior |
+| --- | --- |
+| **Inspect** | Analyzes single videos and playlists with yt-dlp JSON output. Each link has a 90-second process deadline. |
+| **Select** | Shows playlist entries with thumbnails, durations, source labels, and per-item selection. |
+| **Download** | Runs a sequential queue with live yt-dlp output, elapsed time, ETA, retry support, and cancel control. |
+| **Formats** | MP3, WAV, M4A, FLAC, MP4, and WEBM. Audio exports receive square, center-cropped album art. |
+| **Compatibility** | Loads yt-dlp's extractor catalog with search and `CURRENTLY BROKEN` markers. Catalog lookup has a 30-second deadline and cancel control. |
+| **Authentication** | Uses a browser cookie profile or a selected `cookies.txt` file when a source requires login. |
+| **Bootstrap** | Reuses local tools when possible. Downloads report speed and remaining time; servers without `Content-Length` use an indeterminate progress bar instead of a fake percentage. |
 
-### Prerequisites
+> Use Spull only for media you are allowed to download. yt-dlp support depends on the source site and its current policies.
+
+## Screenshots in one sentence
+
+Light logo-derived colors, compact pixel accents, no decorative clutter: the queue and its current state remain the visual priority.
+
+## Quick start
+
+### Requirements
 
 - Flutter stable with Dart 3.13 or newer.
-- Internet access on first launch so Spull can automatically install yt-dlp, ffmpeg, and the optional Deno runtime.
+- Internet access on first launch if yt-dlp, FFmpeg, or optional Deno must be installed.
 - Existing `yt-dlp` and `ffmpeg` binaries on `PATH` are detected and reused.
-- Linux: `clang`, `cmake`, `ninja-build`, `pkg-config`, `libgtk-3-dev`, and `libstdc++-12-dev`.
-- macOS: Xcode Command Line Tools for building the macOS target.
-- Windows: Visual Studio Build Tools with the Desktop C++ workload.
+- **Windows:** Visual Studio Build Tools with the Desktop C++ workload.
+- **macOS:** Xcode Command Line Tools.
+- **Linux:** `clang`, `cmake`, `ninja-build`, `pkg-config`, `libgtk-3-dev`, and `libstdc++-12-dev`.
 
-### Run the app
+### Run locally
 
 ```bash
 flutter pub get
@@ -43,7 +57,7 @@ flutter run -d macos
 flutter run -d linux
 ```
 
-### Build releases
+### Build locally
 
 ```bash
 flutter build windows --release
@@ -51,67 +65,103 @@ flutter build macos --release
 flutter build linux --release
 ```
 
-The Linux release artifact is a `.tar.gz` containing the complete Flutter bundle
-at its root; extract it and run `spull`.
-Windows releases provide two options:
-- `spull-windows-x86_64.zip`: portable bundle; extract the full archive and run
-  `spull.exe`.
-- `spull-windows-x86_64-setup.zip`: antivirus-safe GUI installer bundle;
-  extract it and double-click `Install-Spull.vbs`. The setup payload includes
-  Windows FFmpeg, so the first launch does not wait for an FFmpeg download.
-  The wizard installs Spull under `%LOCALAPPDATA%\Spull`, creates Start Menu
-  shortcuts for Spull and `Uninstall Spull`, and can launch the app. The setup
-  folder also contains `Uninstall-Spull.vbs` for the default install location;
-  for a custom install folder, run the copy inside that installed folder.
+The complete Flutter runtime bundle is required at launch. Do not copy only `spull.exe` or only the Linux executable.
 
-The macOS Release configuration uses `CODE_SIGN_IDENTITY = -` and disables provisioning-profile requirements, producing an ad-hoc signed app suitable for local distribution. It is not notarized and cannot be used as a Mac App Store submission. See [`macos/ExportOptions.plist`](macos/ExportOptions.plist).
+## Dependency resolution
 
-### Continuous integration
+Spull checks executable locations in this order:
 
-GitHub Actions verifies and builds Linux, macOS, and Windows on every
-`release-*` tag. A release tag must point to a commit whose subject starts with
-`release(scope):`, such as `release(v1.2.2): publish desktop artifacts`.
-After feature work is committed and the working tree is clean, publish a
-release with the guarded PowerShell script:
+1. `%LOCALAPPDATA%/Spull/bin` on Windows, or the platform Spull data directory on macOS/Linux.
+2. `bin/` beside the installed `spull` executable.
+3. The system `PATH`.
+
+The first-launch bootstrap can install:
+
+- **yt-dlp** — required for analysis and downloads.
+- **FFmpeg** — required for audio extraction and media conversion.
+- **Deno** — optional; improves extractor compatibility.
+
+Bootstrap status includes the current tool, progress mode, transfer speed, and ETA when a total size is available. A partial download is kept separate until it completes, so an interrupted tool download does not replace a working binary.
+
+## Release artifacts
+
+### Windows
+
+The release workflow produces two archives:
+
+- `spull-windows-x86_64.zip` — portable Flutter bundle. Extract the whole archive and run `spull.exe`.
+- `spull-windows-x86_64-setup.zip` — antivirus-safe GUI setup bundle. Extract it and double-click `Install-Spull.vbs`.
+
+The setup bundle contains Windows FFmpeg under `bin/`, so a fresh setup does not wait for the large FFmpeg archive on first launch. The installer defaults to `%LOCALAPPDATA%\\Spull`, creates Start Menu shortcuts for Spull and `Uninstall Spull`, and can launch the app after installation.
+
+For removal:
+
+- Use the **Uninstall Spull** Start Menu shortcut from an installed copy.
+- The setup folder also contains `Uninstall-Spull.vbs` for the default install path.
+- For a custom install directory, run the uninstaller copy inside that installed directory.
+
+### Linux
+
+The Linux artifact is a `.tar.gz` containing the complete Flutter bundle at its root. Extract it and run `spull`.
+
+### macOS
+
+The macOS release uses ad-hoc signing (`CODE_SIGN_IDENTITY = -`) without provisioning profiles. It is suitable for local distribution, but it is not notarized and is not a Mac App Store submission. See [`macos/ExportOptions.plist`](macos/ExportOptions.plist).
+
+## Publishing a release
+
+Feature work must be committed first. The guarded publisher updates the patch release build number, verifies the repository, creates the release commit and annotated tag, then pushes only the requested branch and tag.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
-  -File tool/publish_release.ps1 -Version 1.2.2
+  -File tool/publish_release.ps1 -Version 1.2.4
 ```
 
-The script checks the branch, working tree, and local/remote tag, updates
-`pubspec.yaml`, runs the project verification, creates the release commit and
-annotated tag, then pushes only `main` and that tag. Do not use
-`git push origin main --tags`; it attempts to push every local tag, including
-tags that already exist on the remote. `workflow_dispatch` runs the same
-verification and uploads complete desktop bundles without publishing a
-release. Ordinary branch pushes do not publish artifacts.
+The release tag must point to a commit whose subject starts with `release(scope):`, for example:
 
-The CI build validates the platform executable together with its Flutter
-runtime files before packaging. Windows archives place `spull.exe`,
-`flutter_windows.dll`, plugin DLLs, and `data/` at the archive root; extract the
-whole archive before launching the app. The setup archive additionally places
-`ffmpeg.exe` under `bin/` in the installed runtime.
+```text
+release(v1.2.4): publish desktop artifacts
+```
 
-The Windows release job publishes the portable ZIP and a script-based GUI setup
-bundle instead of an unsigned custom setup executable.
+The script intentionally performs a targeted push equivalent to:
 
-### Dependency locations
+```bash
+git push origin main release-v1.2.4
+```
 
-Spull checks binaries in this order:
+Do **not** use `git push origin main --tags`; that retries every local tag, including tags already present on the remote. GitHub Actions builds Linux, macOS, and Windows only for `release-*` tags. `workflow_dispatch` remains available for manual verification without publishing a release.
 
-1. `%LOCALAPPDATA%/Spull/bin` (downloaded tools; retained between launches)
-2. `bin/` beside the installed `spull.exe` (including FFmpeg from the setup ZIP)
-3. The system `PATH`
+## Project map
 
-If FFmpeg is absent or unusable, Spull downloads it once into the first
-location and reuses that copy on later launches. Settings are stored as JSON in
-the platform's Spull application-data folder.
+```text
+lib/
+├── home_page.dart                 Flutter dashboard and controls
+├── models/media_models.dart       Settings, queue, and event models
+├── services/spull_backend.dart    yt-dlp, FFmpeg, downloads, bootstrap
+└── state/app_controller.dart      UI state, cancellation, and queue flow
 
-## Legal Disclaimer
+tool/
+├── verify.dart                    Local/CI formatter, analyzer, and test gate
+├── publish_release.ps1            Guarded branch/tag release publisher
+├── package_windows_release.ps1   Portable and setup archive packaging
+├── Install-Spull.ps1              Windows setup wizard
+└── Uninstall-Spull.ps1            Windows removal script
+```
 
-This project is for educational and personal use only. Users are responsible for complying with each source site's terms of service and copyright law. Do not download copyrighted material unless you have the right to do so.
+## Development checks
+
+Run the same gate used by CI:
+
+```bash
+dart run tool/verify.dart
+```
+
+This runs dependency resolution, formatting checks, Flutter analysis, and the widget test suite.
+
+## Legal
+
+Spull is for educational and personal use. You are responsible for complying with each source site's terms of service, copyright law, and any authentication requirements. Do not download copyrighted material unless you have the right to do so.
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](LICENSE).
