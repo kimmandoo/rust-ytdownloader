@@ -59,8 +59,9 @@ Windows releases provide two options:
 - `spull-windows-x86_64-setup.zip`: antivirus-safe GUI installer bundle;
   extract it and double-click `Install-Spull.vbs`. The setup payload includes
   Windows FFmpeg, so the first launch does not wait for an FFmpeg download.
-  The wizard installs Spull under `%LOCALAPPDATA%\Spull`, creates a Start Menu
-  shortcut, and can launch the app.
+  The wizard installs Spull under `%LOCALAPPDATA%\Spull`, creates Start Menu
+  shortcuts for Spull and `Uninstall Spull`, and can launch the app. The
+  installed folder also contains `Uninstall-Spull.vbs`.
 
 The macOS Release configuration uses `CODE_SIGN_IDENTITY = -` and disables provisioning-profile requirements, producing an ad-hoc signed app suitable for local distribution. It is not notarized and cannot be used as a Mac App Store submission. See [`macos/ExportOptions.plist`](macos/ExportOptions.plist).
 

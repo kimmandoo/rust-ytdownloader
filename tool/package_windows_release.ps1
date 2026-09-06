@@ -61,6 +61,10 @@ try {
         -Destination $setupStage -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "Install-Spull.vbs") `
         -Destination $setupStage -Force
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "Uninstall-Spull.ps1") `
+        -Destination $setupStage -Force
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "Uninstall-Spull.vbs") `
+        -Destination $setupStage -Force
     Copy-Item -LiteralPath $runtimeArchive -Destination $setupStage -Force
     @'
 Spull Setup
@@ -68,6 +72,7 @@ Spull Setup
 
 Double-click Install-Spull.vbs to open the GUI installation wizard.
 The launcher starts Windows PowerShell without opening a console window.
+The installed folder contains Uninstall-Spull.vbs for removing Spull later.
 The setup payload includes FFmpeg, so the app does not need to download it
 on its first launch.
 '@ | Set-Content -Path (Join-Path $setupStage "README.txt") -Encoding UTF8

@@ -1,15 +1,20 @@
 # Work checkpoint
 
-- Active task: Documented the safe targeted push for release tags.
-- Next action: Inspect the `release-v1.2.1` GitHub Actions run; the tag and
-  `main` branch are already pushed.
-- Changed files: `README.md`, `CHANGELOG.md`, `docs/WORK_CHECKPOINT.md`.
-- Release state: `release-v1.2.1` points to `cc99e2b`, and `origin/main` also
-  points to `cc99e2b`.
-- Push correction: `git push origin main release-v1.2.1` pushes only the
-  requested branch and release tag. `git push origin main --tags` retries every
-  local tag and is not documented or recommended.
+- Active task: Added a Windows uninstaller to the script-based setup bundle.
+- Next action: Commit the uninstaller change; no blockers remain.
+- Changed files: `tool/Install-Spull.ps1`, `tool/Uninstall-Spull.ps1`,
+  `tool/Uninstall-Spull.vbs`, `tool/package_windows_release.ps1`, `README.md`,
+  `CHANGELOG.md`, and this checkpoint.
+- Runtime behavior: Installation copies both uninstaller files into the
+  installed folder and creates an `Uninstall Spull` Start Menu shortcut when
+  shortcuts are enabled. The uninstaller validates the install executable,
+  asks for confirmation, stops the installed Spull process, removes only
+  matching Start Menu shortcuts and the install directory, and reports errors.
 - Verification:
+  - PowerShell parser accepted the installer, uninstaller, and packaging
+    scripts.
+  - Local Windows packaging passed and produced portable plus setup ZIPs.
+  - Setup ZIP contains `Uninstall-Spull.ps1` and `Uninstall-Spull.vbs`.
+  - Nested runtime contains bundled `bin/ffmpeg.exe` (102,856,192 bytes).
   - `git diff --check` passed.
-- Blockers: None. The old-tag rejection was harmless; the requested branch and
-  release tag were accepted by the remote.
+- Blockers: None.

@@ -18,6 +18,8 @@
   setup ZIP to avoid antivirus quarantine of the self-extracting binary.
 - fix(release): bundled Windows FFmpeg in the setup payload and reused
   installed local binaries before downloading replacements.
+- feat(release): added a Windows uninstaller script and Start Menu shortcut
+  to remove installed Spull files.
 - fix(release): documented targeted branch-and-tag pushes so existing local
   tags were not retried during publication.
 - feat(spull): migrated the desktop downloader to Dart and Flutter.

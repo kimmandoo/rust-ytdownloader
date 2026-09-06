@@ -5,6 +5,8 @@ Add-Type -AssemblyName System.Windows.Forms
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $payloadArchive = Join-Path $scriptRoot 'spull-runtime.zip'
+$uninstallScript = Join-Path $scriptRoot 'Uninstall-Spull.ps1'
+$uninstallLauncher = Join-Path $scriptRoot 'Uninstall-Spull.vbs'
 
 function Show-Error([string]$message) {
     [System.Windows.Forms.MessageBox]::Show(
@@ -16,6 +18,11 @@ function Show-Error([string]$message) {
 
 if (-not (Test-Path -LiteralPath $payloadArchive -PathType Leaf)) {
     Show-Error "The Spull runtime archive is missing from $scriptRoot."
+    exit 1
+}
+if (-not (Test-Path -LiteralPath $uninstallScript -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $uninstallLauncher -PathType Leaf)) {
+    Show-Error "The Spull uninstaller is missing from $scriptRoot."
     exit 1
 }
 
@@ -147,6 +154,8 @@ $installButton.Add_Click({
         New-Item -ItemType Directory -Path $staging -Force | Out-Null
         Copy-Item -LiteralPath $payloadArchive -Destination $temporaryArchive -Force
         Expand-Archive -LiteralPath $temporaryArchive -DestinationPath $staging -Force
+        Copy-Item -LiteralPath $uninstallScript -Destination $staging -Force
+        Copy-Item -LiteralPath $uninstallLauncher -Destination $staging -Force
 
         if (Test-Path -LiteralPath $destination) {
             $backup = "$destination.old-$([guid]::NewGuid().ToString('N'))"
@@ -158,16 +167,26 @@ $installButton.Add_Click({
         }
 
         $executable = Join-Path $destination 'spull.exe'
+        $uninstaller = Join-Path $destination 'Uninstall-Spull.vbs'
         if ($createShortcut.Checked) {
             $programs = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Microsoft\Windows\Start Menu\Programs'
             New-Item -ItemType Directory -Path $programs -Force | Out-Null
-            $shortcutPath = Join-Path $programs 'Spull.lnk'
             $shell = New-Object -ComObject WScript.Shell
+
+            $shortcutPath = Join-Path $programs 'Spull.lnk'
             $shortcut = $shell.CreateShortcut($shortcutPath)
             $shortcut.TargetPath = $executable
             $shortcut.WorkingDirectory = $destination
             $shortcut.Description = 'Spull media downloader'
             $shortcut.Save()
+
+            $uninstallShortcutPath = Join-Path $programs 'Uninstall Spull.lnk'
+            $uninstallShortcut = $shell.CreateShortcut($uninstallShortcutPath)
+            $uninstallShortcut.TargetPath = Join-Path $env:WINDIR 'System32\wscript.exe'
+            $uninstallShortcut.Arguments = '"' + $uninstaller + '"'
+            $uninstallShortcut.WorkingDirectory = $destination
+            $uninstallShortcut.Description = 'Uninstall Spull'
+            $uninstallShortcut.Save()
         }
         if ($launchAfterInstall.Checked) {
             Start-Process -FilePath $executable -WorkingDirectory $destination
