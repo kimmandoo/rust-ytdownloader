@@ -1,21 +1,15 @@
 # Work checkpoint
 
-- Active task: Added a Windows uninstaller to the script-based setup bundle.
-- Next action: Push `main`; publish a new release tag when the uninstaller is
-  ready for users.
-- Changed files: `tool/Install-Spull.ps1`, `tool/Uninstall-Spull.ps1`,
-  `tool/Uninstall-Spull.vbs`, `tool/package_windows_release.ps1`, `README.md`,
-  `CHANGELOG.md`, and this checkpoint.
-- Runtime behavior: Installation copies both uninstaller files into the
-  installed folder and creates an `Uninstall Spull` Start Menu shortcut when
-  shortcuts are enabled. The uninstaller validates the install executable,
-  asks for confirmation, stops the installed Spull process, removes only
-  matching Start Menu shortcuts and the install directory, and reports errors.
+- Active task: Added a guarded PowerShell publisher for release commits and
+  targeted tag pushes.
+- Next action: Commit the publisher changes, then run it for `v1.2.2`.
+- Changed files: `tool/publish_release.ps1`, `README.md`, `CHANGELOG.md`, and
+  this checkpoint.
+- Publisher behavior: It requires a clean `main` worktree, rejects existing
+  local or remote release tags, updates `pubspec.yaml`, runs verification,
+  creates `release(vX.Y.Z): publish desktop artifacts`, creates an annotated
+  `release-vX.Y.Z` tag, and pushes only `main` plus that tag.
 - Verification:
-  - PowerShell parser accepted the installer, uninstaller, and packaging
-    scripts.
-  - Local Windows packaging passed and produced portable plus setup ZIPs.
-  - Setup ZIP contains `Uninstall-Spull.ps1` and `Uninstall-Spull.vbs`.
-  - Nested runtime contains bundled `bin/ffmpeg.exe` (102,856,192 bytes).
+  - PowerShell parser accepted the publisher script.
   - `git diff --check` passed.
 - Blockers: None.

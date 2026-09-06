@@ -20,6 +20,8 @@
   installed local binaries before downloading replacements.
 - feat(release): added a Windows uninstaller script and Start Menu shortcut
   to remove installed Spull files.
+- feat(release): added a guarded publisher script that checked existing tags
+  and pushed only the requested release branch and tag.
 - fix(release): documented targeted branch-and-tag pushes so existing local
   tags were not retried during publication.
 - feat(spull): migrated the desktop downloader to Dart and Flutter.

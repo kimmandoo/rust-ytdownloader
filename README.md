@@ -69,17 +69,21 @@ The macOS Release configuration uses `CODE_SIGN_IDENTITY = -` and disables provi
 
 GitHub Actions verifies and builds Linux, macOS, and Windows on every
 `release-*` tag. A release tag must point to a commit whose subject starts with
-`release(scope):`, such as `release(v1.2.0): publish desktop artifacts`.
-To publish one release without retrying every old local tag, push only the
-branch and release tag:
+`release(scope):`, such as `release(v1.2.2): publish desktop artifacts`.
+After feature work is committed and the working tree is clean, publish a
+release with the guarded PowerShell script:
 
-```bash
-git push origin main release-v1.2.1
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File tool/publish_release.ps1 -Version 1.2.2
 ```
 
-Do not use `git push origin main --tags`; it attempts to push every local tag,
-including tags that already exist on the remote. `workflow_dispatch` runs the
-same verification and uploads complete desktop bundles without publishing a
+The script checks the branch, working tree, and local/remote tag, updates
+`pubspec.yaml`, runs the project verification, creates the release commit and
+annotated tag, then pushes only `main` and that tag. Do not use
+`git push origin main --tags`; it attempts to push every local tag, including
+tags that already exist on the remote. `workflow_dispatch` runs the same
+verification and uploads complete desktop bundles without publishing a
 release. Ordinary branch pushes do not publish artifacts.
 
 The CI build validates the platform executable together with its Flutter
