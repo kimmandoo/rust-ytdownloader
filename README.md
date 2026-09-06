@@ -23,7 +23,7 @@ Spull turns one or more links into a selectable download queue. It keeps the int
 | --- | --- |
 | **Inspect** | Analyzes single videos and playlists with yt-dlp JSON output. Each link has a 90-second process deadline. |
 | **Select** | Shows playlist entries with thumbnails, durations, source labels, and per-item selection. |
-| **Download** | Runs a sequential queue with live yt-dlp output, elapsed time, ETA, retry support, and cancel control. |
+| **Download** | Runs a sequential queue with live yt-dlp output, elapsed time, ETA, retry support, stall detection, and cancel control. |
 | **Formats** | MP3, WAV, M4A, FLAC, MP4, and WEBM. Audio exports receive square, center-cropped album art. |
 | **Compatibility** | Loads yt-dlp's extractor catalog with search and `CURRENTLY BROKEN` markers. Catalog lookup has a 30-second deadline and cancel control. |
 | **Authentication** | Uses a browser cookie profile or a selected `cookies.txt` file when a source requires login. |
@@ -82,6 +82,20 @@ The first-launch bootstrap can install:
 - **Deno** — optional; improves extractor compatibility.
 
 Bootstrap status includes the current tool, progress mode, transfer speed, and ETA when a total size is available. A partial download is kept separate until it completes, so an interrupted tool download does not replace a working binary.
+
+### Long downloads and stall recovery
+
+Actual media downloads use a no-output watchdog in addition to yt-dlp's network
+timeouts:
+
+- Five minutes without any yt-dlp or FFmpeg output is shown as `응답 없음`.
+- The current process tree is terminated so a hidden child process cannot keep
+  running.
+- Spull retries the same item once with yt-dlp's `--continue` support.
+- If the retry also stalls, the item fails visibly and the queue stops instead
+  of waiting forever.
+- A manual `CANCEL` remains an explicit stop and does not trigger an automatic
+  retry.
 
 ## Release artifacts
 

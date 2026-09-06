@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-09-06
+- fix(download): added a five-minute stalled-output watchdog that terminated
+  stuck process trees, retried once with resume support, and reported final
+  failures.
 - feat(analysis): added yt-dlp process timeouts and cancellation controls for
   link scans and extractor catalog loading.
 - fix(bootstrap): displayed indeterminate progress, transfer speed, and

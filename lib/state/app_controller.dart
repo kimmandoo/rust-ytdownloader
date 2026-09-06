@@ -389,7 +389,11 @@ class SpullController extends ChangeNotifier {
         ? event.title
         : '${event.title} · ${event.source}';
     downloadMessage = event.message;
-    if (event.kind == 'starting' || event.kind == 'failed') _log(event.message);
+    if (event.kind == 'starting' ||
+        event.kind == 'failed' ||
+        event.kind == 'stalled') {
+      _log(event.message);
+    }
     if (event.kind == 'completed') _log('다운로드 완료: $downloadTitle');
     if (event.kind == 'failed') {
       _stopDownloadClock();

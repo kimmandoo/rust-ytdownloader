@@ -31,6 +31,10 @@ class SpullProcessTimeout implements Exception {
 }
 
 class SpullBackend {
+  SpullBackend({this.downloadStallTimeout = const Duration(minutes: 5)});
+
+  final Duration downloadStallTimeout;
+
   Process? _downloadProcess;
   _ManagedProcess? _analysisProcess;
   _ManagedProcess? _supportedSitesProcess;
@@ -39,6 +43,7 @@ class SpullBackend {
   static const _analysisTimeout = Duration(seconds: 90);
   static const _supportedSitesTimeout = Duration(seconds: 30);
   static const _processTerminationTimeout = Duration(seconds: 2);
+  static const _maxStallRetries = 1;
 
   Directory get dataDirectory {
     final environment = Platform.environment;
@@ -889,7 +894,115 @@ class SpullBackend {
     }
     args.add(entry.url);
 
-    Process process;
+    for (var attempt = 0; attempt <= _maxStallRetries; attempt += 1) {
+      if (_stopRequested) {
+        controller.add(
+          _event(
+            'stopped',
+            current,
+            total,
+            _overall(current - 1, 0, total),
+            entry,
+            '전체 작업을 취소했습니다.',
+          ),
+        );
+        return false;
+      }
+      if (attempt > 0) {
+        controller.add(
+          _event(
+            'starting',
+            current,
+            total,
+            _overall(current - 1, 0, total),
+            entry,
+            '응답 없음 · $attempt/$_maxStallRetries 재시도를 시작합니다.',
+          ),
+        );
+      }
+
+      final result = await _downloadAttempt(
+        args: args,
+        entry: entry,
+        current: current,
+        total: total,
+        controller: controller,
+      );
+      if (_stopRequested) {
+        controller.add(
+          _event(
+            'stopped',
+            current,
+            total,
+            _overall(current - 1, 0, total),
+            entry,
+            '전체 작업을 취소했습니다.',
+          ),
+        );
+        return false;
+      }
+      if (result.stalled) {
+        if (attempt < _maxStallRetries) {
+          controller.add(
+            _event(
+              'message',
+              current,
+              total,
+              _overall(current - 1, result.percent, total),
+              entry,
+              '응답 없음 · ${attempt + 1}/$_maxStallRetries 자동 재시도합니다.',
+            ),
+          );
+          continue;
+        }
+        controller.add(
+          _event(
+            'failed',
+            current,
+            total,
+            0,
+            entry,
+            '응답 없음 · ${_formatDuration(downloadStallTimeout)} 동안 진행이 없어 다운로드를 중단했습니다.',
+          ),
+        );
+        return false;
+      }
+      if (result.error != null) {
+        controller.add(
+          _event('failed', current, total, 0, entry, result.error!),
+        );
+        return false;
+      }
+      if (result.exitCode != 0) {
+        final details = result.stderrLines.isEmpty
+            ? 'yt-dlp가 오류 코드 ${result.exitCode}로 종료되었습니다.'
+            : result.stderrLines.last;
+        controller.add(_event('failed', current, total, 0, entry, details));
+        return false;
+      }
+      controller.add(
+        _event(
+          'completed',
+          current,
+          total,
+          _overall(current - 1, 100, total),
+          entry,
+          '저장 완료',
+        ),
+      );
+      return true;
+    }
+    return false;
+  }
+
+  Future<_DownloadAttempt> _downloadAttempt({
+    required List<String> args,
+    required VideoEntry entry,
+    required int current,
+    required int total,
+    required StreamController<DownloadEvent> controller,
+  }) async {
+    late final Process process;
     try {
       process = await Process.start(
         ytdlpExecutable,
@@ -898,10 +1011,12 @@ class SpullBackend {
         runInShell: true,
       );
     } catch (error) {
-      controller.add(
-        _event('failed', current, total, 0, entry, 'yt-dlp 실행 실패: $error'),
+      return _DownloadAttempt(
+        exitCode: -1,
+        percent: 0,
+        stderrLines: const <String>[],
+        error: 'yt-dlp 실행 실패: $error',
       );
-      return false;
     }
     _downloadProcess = process;
 
@@ -909,7 +1024,38 @@ class SpullBackend {
     var lastProgressAt = DateTime.fromMillisecondsSinceEpoch(0);
     var lastProgress = -1.0;
     var latestItemPercent = 0.0;
+    var lastActivityAt = DateTime.now();
+    var stallDetected = false;
+    Timer? watchdog;
+
+    void armWatchdog() {
+      watchdog?.cancel();
+      watchdog = Timer(downloadStallTimeout, () {
+        if (stallDetected || _stopRequested) return;
+        if (DateTime.now().difference(lastActivityAt) < downloadStallTimeout) {
+          armWatchdog();
+          return;
+        }
+        stallDetected = true;
+        controller.add(
+          _event(
+            'stalled',
+            current,
+            total,
+            _overall(current - 1, latestItemPercent, total),
+            entry,
+            '응답 없음 · ${_formatDuration(downloadStallTimeout)} 동안 진행이 없어 중단합니다.',
+          ),
+        );
+        unawaited(_terminateProcess(process));
+      });
+    }
+
     void emitProcessLine(String line) {
+      if (line.trim().isNotEmpty) {
+        lastActivityAt = DateTime.now();
+        armWatchdog();
+      }
       final match = RegExp(r'(\d+(?:\.\d+)?)%').firstMatch(line);
       final percent = match == null ? null : double.tryParse(match.group(1)!);
       if (percent != null) {
@@ -933,56 +1079,37 @@ class SpullBackend {
       );
     }
 
-    final stdoutSubscription = process.stdout
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen(emitProcessLine);
-    final stderrSubscription = process.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) {
-          if (line.trim().isNotEmpty) {
-            stderrLines.add(line.trim());
-            if (stderrLines.length > 20) stderrLines.removeAt(0);
+    StreamSubscription<String>? stdoutSubscription;
+    StreamSubscription<String>? stderrSubscription;
+    try {
+      stdoutSubscription = process.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(emitProcessLine);
+      stderrSubscription = process.stderr
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+            if (line.trim().isNotEmpty) {
+              stderrLines.add(line.trim());
+              if (stderrLines.length > 20) stderrLines.removeAt(0);
+            }
             emitProcessLine(line);
-          }
-        });
-    final exitCode = await process.exitCode;
-    await stdoutSubscription.cancel();
-    await stderrSubscription.cancel();
-    _downloadProcess = null;
-
-    if (_stopRequested) {
-      controller.add(
-        _event(
-          'stopped',
-          current,
-          total,
-          _overall(current - 1, 0, total),
-          entry,
-          '전체 작업을 취소했습니다.',
-        ),
+          });
+      armWatchdog();
+      final exitCode = await process.exitCode;
+      return _DownloadAttempt(
+        exitCode: exitCode,
+        percent: latestItemPercent,
+        stderrLines: stderrLines,
+        stalled: stallDetected,
       );
-      return false;
+    } finally {
+      watchdog?.cancel();
+      if (stdoutSubscription != null) await stdoutSubscription.cancel();
+      if (stderrSubscription != null) await stderrSubscription.cancel();
+      if (identical(_downloadProcess, process)) _downloadProcess = null;
     }
-    if (exitCode != 0) {
-      final details = stderrLines.isEmpty
-          ? 'yt-dlp가 오류 코드 $exitCode로 종료되었습니다.'
-          : stderrLines.last;
-      controller.add(_event('failed', current, total, 0, entry, details));
-      return false;
-    }
-    controller.add(
-      _event(
-        'completed',
-        current,
-        total,
-        _overall(current - 1, 100, total),
-        entry,
-        '저장 완료',
-      ),
-    );
-    return true;
   }
 
   void _handleProcessLine(
@@ -1109,4 +1236,20 @@ class _YtdlpResult {
   final int exitCode;
   final String stdout;
   final String stderr;
+}
+
+class _DownloadAttempt {
+  const _DownloadAttempt({
+    required this.exitCode,
+    required this.percent,
+    required this.stderrLines,
+    this.stalled = false,
+    this.error,
+  });
+
+  final int exitCode;
+  final double percent;
+  final List<String> stderrLines;
+  final bool stalled;
+  final String? error;
 }

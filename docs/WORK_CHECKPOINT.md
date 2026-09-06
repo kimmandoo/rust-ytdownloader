@@ -1,22 +1,18 @@
 # Work checkpoint
 
-- Active task: Added cancellable yt-dlp analysis and resilient bootstrap progress.
-- Next action: Commit the implementation and inspect the next release workflow run.
+- Active task: Added and verified stalled-download recovery.
+- Next action: Commit the watchdog changes, then run
+  `tool/publish_release.ps1 -Version 1.2.4` to create and push the release.
 - Changed files: `lib/services/spull_backend.dart`, `lib/state/app_controller.dart`,
-  `lib/home_page.dart`, `lib/widgets/pixel_widgets.dart`, `test/widget_test.dart`,
   `README.md`, `CHANGELOG.md`, and this checkpoint.
-- Runtime behavior: Link analysis has a 90-second process deadline and a
-  `CANCEL SCAN` control. Extractor catalog loading has a 30-second deadline and
-  its own cancel control. Windows and POSIX process trees are terminated when
-  cancellation or timeout occurs.
-- Bootstrap behavior: Dependency downloads report transfer speed and ETA when
-  the response exposes a total size. Missing `Content-Length` now uses an
-  indeterminate progress bar and reports received bytes plus speed.
-- Documentation: README was reorganized around features, setup, dependency
-  resolution, release artifacts, publishing, and project layout.
+- Runtime behavior: Each media download arms a five-minute no-output watchdog.
+  Any non-empty yt-dlp or FFmpeg output resets it. A stalled process emits an
+  `응답 없음` event, terminates its process tree, retries once using yt-dlp
+  resume support, and reports a visible failure if the retry stalls again.
+  Manual cancellation remains a stop and never retries.
 - Verification:
-  - `dart run tool/.tmp_process_smoke.dart` passed native analysis and
-    supported-sites process cancellation; temporary smoke files were removed.
-  - `flutter analyze` passed with no issues.
+  - Temporary stalled-download smoke passed with two watchdog events, one
+    automatic retry, and a final failure; the temporary script removed itself.
   - `dart run tool/verify.dart` passed formatting, analysis, and all widget tests.
+- Release state: Current base is `f67e24d`; release target is `1.2.4`.
 - Blockers: None.
