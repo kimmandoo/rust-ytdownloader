@@ -1,7 +1,8 @@
 # Work checkpoint
 
 - Active task: Added a Windows uninstaller to the script-based setup bundle.
-- Next action: Commit the uninstaller change; no blockers remain.
+- Next action: Push `main`; publish a new release tag when the uninstaller is
+  ready for users.
 - Changed files: `tool/Install-Spull.ps1`, `tool/Uninstall-Spull.ps1`,
   `tool/Uninstall-Spull.vbs`, `tool/package_windows_release.ps1`, `README.md`,
   `CHANGELOG.md`, and this checkpoint.
