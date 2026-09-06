@@ -865,7 +865,8 @@ class SpullBackend {
     ];
     if (settings.format.isAudio) {
       args.addAll(<String>['-x', '--audio-format', settings.format.value]);
-      if (settings.format == DownloadFormat.mp3) {
+      if (settings.format == DownloadFormat.mp3 ||
+          settings.format == DownloadFormat.m4a) {
         args.addAll(<String>['--audio-quality', settings.audioQuality]);
       }
       // Keep the source resolution, but center-crop it to a square before
@@ -878,16 +879,29 @@ class SpullBackend {
         r'ThumbnailsConvertor+ffmpeg_o:-vf crop=min(iw\\,ih):min(iw\\,ih) -q:v 1',
       ]);
     } else if (settings.format == DownloadFormat.mp4) {
+      final bestVideo = _formatSelector(
+        'bestvideo',
+        settings.videoQuality,
+        extension: 'mp4',
+      );
+      final best = _formatSelector(
+        'best',
+        settings.videoQuality,
+        extension: 'mp4',
+      );
+      final bestAtOrBelow = _formatSelector('best', settings.videoQuality);
       args.addAll(<String>[
         '-f',
-        'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        '$bestVideo+bestaudio[ext=m4a]/$best/$bestAtOrBelow',
         '--merge-output-format',
         'mp4',
       ]);
     } else {
+      final bestVideo = _formatSelector('bestvideo', settings.videoQuality);
+      final best = _formatSelector('best', settings.videoQuality);
       args.addAll(<String>[
         '-f',
-        'bestvideo[ext=webm]+bestaudio/best',
+        '$bestVideo+bestaudio/$best',
         '--merge-output-format',
         'webm',
       ]);
@@ -1008,7 +1022,7 @@ class SpullBackend {
         ytdlpExecutable,
         args,
         environment: _environment,
-        runInShell: true,
+        runInShell: false,
       );
     } catch (error) {
       return _DownloadAttempt(
@@ -1171,6 +1185,15 @@ class SpullBackend {
       return <String>['--cookies-from-browser', settings.cookieBrowser];
     }
     return const <String>[];
+  }
+
+  String _formatSelector(String base, String quality, {String? extension}) {
+    final height = quality.endsWith('p')
+        ? int.tryParse(quality.substring(0, quality.length - 1))
+        : null;
+    final extensionFilter = extension == null ? '' : '[ext=$extension]';
+    final heightFilter = height == null ? '' : '[height<=$height]';
+    return '$base$extensionFilter$heightFilter';
   }
 
   List<String> get _runtimeArguments {

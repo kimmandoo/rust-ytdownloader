@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026-09-06
+- feat(download): added persisted audio bitrate and video resolution
+  controls with safe yt-dlp fallbacks.
 - fix(download): added a five-minute stalled-output watchdog that terminated
   stuck process trees, retried once with resume support, and reported final
   failures.

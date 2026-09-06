@@ -2,6 +2,17 @@ import 'dart:convert';
 
 enum DownloadFormat { mp3, wav, m4a, flac, mp4, webm }
 
+const audioQualityOptions = <String>['128K', '192K', '256K', '320K'];
+const videoQualityOptions = <String>[
+  'best',
+  '2160p',
+  '1440p',
+  '1080p',
+  '720p',
+  '480p',
+  '360p',
+];
+
 extension DownloadFormatX on DownloadFormat {
   String get value => name;
   String get label => name.toUpperCase();
@@ -11,6 +22,7 @@ extension DownloadFormatX on DownloadFormat {
     DownloadFormat.m4a,
     DownloadFormat.flac,
   }.contains(this);
+  bool get isVideo => !isAudio;
 }
 
 DownloadFormat downloadFormatFromValue(String value) {
@@ -18,6 +30,15 @@ DownloadFormat downloadFormatFromValue(String value) {
     (format) => format.value == value,
     orElse: () => DownloadFormat.mp3,
   );
+}
+
+String _qualityOrDefault(
+  dynamic rawValue,
+  List<String> options,
+  String fallback,
+) {
+  final value = rawValue?.toString();
+  return value != null && options.contains(value) ? value : fallback;
 }
 
 class UrlRow {
@@ -124,6 +145,7 @@ class AppSettings {
     this.downloadDir,
     this.format = DownloadFormat.mp3,
     this.audioQuality = '320K',
+    this.videoQuality = 'best',
     this.ytdlpChannel = 'stable',
     this.cookieBrowser = 'none',
     this.cookieFile,
@@ -132,6 +154,7 @@ class AppSettings {
   final String? downloadDir;
   final DownloadFormat format;
   final String audioQuality;
+  final String videoQuality;
   final String ytdlpChannel;
   final String cookieBrowser;
   final String? cookieFile;
@@ -142,6 +165,7 @@ class AppSettings {
     DownloadFormat? format,
     String? audioQuality,
     String? ytdlpChannel,
+    String? videoQuality,
     String? cookieBrowser,
     String? cookieFile,
     bool clearCookieFile = false,
@@ -150,6 +174,7 @@ class AppSettings {
       downloadDir: clearDownloadDir ? null : (downloadDir ?? this.downloadDir),
       format: format ?? this.format,
       audioQuality: audioQuality ?? this.audioQuality,
+      videoQuality: videoQuality ?? this.videoQuality,
       ytdlpChannel: ytdlpChannel ?? this.ytdlpChannel,
       cookieBrowser: cookieBrowser ?? this.cookieBrowser,
       cookieFile: clearCookieFile ? null : (cookieFile ?? this.cookieFile),
@@ -160,6 +185,7 @@ class AppSettings {
     'download_dir': downloadDir,
     'format': format.value,
     'audio_quality': audioQuality,
+    'video_quality': videoQuality,
     'ytdlp_channel': ytdlpChannel,
     'ytdlp_cookie_browser': cookieBrowser,
     'ytdlp_cookie_file': cookieFile,
@@ -168,7 +194,16 @@ class AppSettings {
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
     downloadDir: json['download_dir'] as String?,
     format: downloadFormatFromValue(json['format'] as String? ?? 'mp3'),
-    audioQuality: json['audio_quality'] as String? ?? '320K',
+    audioQuality: _qualityOrDefault(
+      json['audio_quality'],
+      audioQualityOptions,
+      '320K',
+    ),
+    videoQuality: _qualityOrDefault(
+      json['video_quality'],
+      videoQualityOptions,
+      'best',
+    ),
     ytdlpChannel: json['ytdlp_channel'] as String? ?? 'stable',
     cookieBrowser: json['ytdlp_cookie_browser'] as String? ?? 'none',
     cookieFile: json['ytdlp_cookie_file'] as String?,

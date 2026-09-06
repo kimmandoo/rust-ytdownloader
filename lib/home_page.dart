@@ -307,9 +307,9 @@ class _SpullDashboardState extends State<_SpullDashboard> {
         const SizedBox(height: 16),
         _buildUrlPanel(),
         const SizedBox(height: 16),
-        _buildQueuePanel(),
-        const SizedBox(height: 16),
         _buildProgressPanel(),
+        const SizedBox(height: 16),
+        _buildQueuePanel(),
       ],
     );
   }
@@ -374,6 +374,8 @@ class _SpullDashboardState extends State<_SpullDashboard> {
   Widget _buildFormatLoadout() {
     final canEdit = controller.isReadyForInput && !controller.isBusy;
     final format = controller.settings.format;
+    final supportsAudioBitrate =
+        format == DownloadFormat.mp3 || format == DownloadFormat.m4a;
     return PixelPanel(
       padding: const EdgeInsets.all(9),
       color: PixelColors.panelLight,
@@ -422,16 +424,41 @@ class _SpullDashboardState extends State<_SpullDashboard> {
               );
             }).toList(),
           ),
-          if (format == DownloadFormat.mp3) ...<Widget>[
-            const SizedBox(height: 8),
-            const Row(
+          if (format.isAudio) ...<Widget>[
+            const SizedBox(height: 10),
+            if (supportsAudioBitrate)
+              _buildSelectField(
+                label: 'AUDIO QUALITY',
+                value: controller.settings.audioQuality,
+                items: audioQualityOptions,
+                onChanged: canEdit
+                    ? (value) {
+                        if (value != null) controller.setAudioQuality(value);
+                      }
+                    : null,
+              )
+            else
+              const Text(
+                'WAV / FLAC · 무손실 포맷이라 비트레이트 선택이 적용되지 않습니다.',
+                style: TextStyle(
+                  color: PixelColors.muted,
+                  fontSize: 9,
+                  height: 1.4,
+                ),
+              ),
+            const SizedBox(height: 7),
+            Row(
               children: <Widget>[
-                Icon(Icons.album_outlined, color: PixelColors.mint, size: 14),
-                SizedBox(width: 6),
+                const Icon(
+                  Icons.album_outlined,
+                  color: PixelColors.mint,
+                  size: 14,
+                ),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    '320K · 앨범아트 MP3 내부 통합',
-                    style: TextStyle(
+                    supportsAudioBitrate ? '앨범아트 포함 · 선택한 음질 적용' : '무손실 오디오 출력',
+                    style: const TextStyle(
                       color: PixelColors.mint,
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
@@ -439,6 +466,28 @@ class _SpullDashboardState extends State<_SpullDashboard> {
                   ),
                 ),
               ],
+            ),
+          ],
+          if (format.isVideo) ...<Widget>[
+            const SizedBox(height: 10),
+            _buildSelectField(
+              label: 'VIDEO QUALITY',
+              value: controller.settings.videoQuality,
+              items: videoQualityOptions,
+              onChanged: canEdit
+                  ? (value) {
+                      if (value != null) controller.setVideoQuality(value);
+                    }
+                  : null,
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              '선택한 해상도 이하에서 가장 높은 화질을 사용합니다.',
+              style: TextStyle(
+                color: PixelColors.muted,
+                fontSize: 9,
+                height: 1.4,
+              ),
             ),
           ],
         ],
@@ -1189,9 +1238,13 @@ class _SpullDashboardState extends State<_SpullDashboard> {
               Expanded(
                 child: Text(
                   controller.downloadMessage,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: PixelColors.text, fontSize: 10),
+                  style: const TextStyle(
+                    color: PixelColors.text,
+                    fontSize: 10,
+                    height: 1.35,
+                  ),
                 ),
               ),
             ],

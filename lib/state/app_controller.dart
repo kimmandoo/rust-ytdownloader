@@ -87,6 +87,12 @@ class SpullController extends ChangeNotifier {
   Future<void> setFormat(DownloadFormat format) =>
       _saveSettings(settings.copyWith(format: format));
 
+  Future<void> setAudioQuality(String quality) =>
+      _saveSettings(settings.copyWith(audioQuality: quality));
+
+  Future<void> setVideoQuality(String quality) =>
+      _saveSettings(settings.copyWith(videoQuality: quality));
+
   Future<void> setChannel(String channel) =>
       _saveSettings(settings.copyWith(ytdlpChannel: channel));
 

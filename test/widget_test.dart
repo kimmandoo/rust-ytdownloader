@@ -22,6 +22,29 @@ void main() {
     controller.dispose();
   });
 
+  test('persists selected audio and video quality', () {
+    const settings = AppSettings(
+      format: DownloadFormat.mp4,
+      audioQuality: '192K',
+      videoQuality: '1080p',
+    );
+
+    final restored = AppSettings.fromJson(settings.toJson());
+
+    expect(restored.audioQuality, '192K');
+    expect(restored.videoQuality, '1080p');
+  });
+
+  test('uses safe quality defaults for unknown saved values', () {
+    final settings = AppSettings.fromJson({
+      'audio_quality': 'invalid',
+      'video_quality': 'invalid',
+    });
+
+    expect(settings.audioQuality, '320K');
+    expect(settings.videoQuality, 'best');
+  });
+
   test('cancelling analysis returns the controller to idle', () async {
     final backend = _BlockingBackend();
     final controller = SpullController(backend: backend);

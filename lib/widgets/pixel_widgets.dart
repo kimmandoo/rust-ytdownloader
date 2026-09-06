@@ -204,16 +204,19 @@ class PixelProgressBar extends StatelessWidget {
               backgroundColor: PixelColors.panel,
               valueColor: AlwaysStoppedAnimation<Color>(PixelColors.mint),
             )
-          : Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: value!.clamp(0, 1),
-                child: Container(
-                  decoration: const BoxDecoration(color: PixelColors.mint),
-                  child: Row(
-                    children: List<Widget>.generate(
-                      12,
-                      (_) => const Expanded(child: SizedBox()),
+          : Container(
+              color: PixelColors.panel,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: value!.clamp(0, 1),
+                  child: Container(
+                    decoration: const BoxDecoration(color: PixelColors.mint),
+                    child: Row(
+                      children: List<Widget>.generate(
+                        12,
+                        (_) => const Expanded(child: SizedBox()),
+                      ),
                     ),
                   ),
                 ),

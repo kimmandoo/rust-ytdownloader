@@ -23,8 +23,8 @@ Spull turns one or more links into a selectable download queue. It keeps the int
 | --- | --- |
 | **Inspect** | Analyzes single videos and playlists with yt-dlp JSON output. Each link has a 90-second process deadline. |
 | **Select** | Shows playlist entries with thumbnails, durations, source labels, and per-item selection. |
-| **Download** | Runs a sequential queue with live yt-dlp output, elapsed time, ETA, retry support, stall detection, and cancel control. |
-| **Formats** | MP3, WAV, M4A, FLAC, MP4, and WEBM. Audio exports receive square, center-cropped album art. |
+| **Download** | Runs a sequential queue with live yt-dlp output, elapsed time, ETA, retry support, stall detection, cancel control, and selectable audio/video quality. |
+| **Formats** | MP3, WAV, M4A, FLAC, MP4, and WEBM. Audio exports receive square, center-cropped album art; MP3/M4A bitrate and MP4/WEBM resolution can be selected. |
 | **Compatibility** | Loads yt-dlp's extractor catalog with search and `CURRENTLY BROKEN` markers. Catalog lookup has a 30-second deadline and cancel control. |
 | **Authentication** | Uses a browser cookie profile or a selected `cookies.txt` file when a source requires login. |
 | **Bootstrap** | Reuses local tools when possible. Downloads report speed and remaining time; servers without `Content-Length` use an indeterminate progress bar instead of a fake percentage. |
@@ -96,6 +96,14 @@ timeouts:
   of waiting forever.
 - A manual `CANCEL` remains an explicit stop and does not trigger an automatic
   retry.
+
+### Quality controls
+
+- MP3/M4A provide 128K, 192K, 256K, and 320K audio bitrate choices.
+- MP4/WEBM provide Best, 2160p, 1440p, 1080p, 720p, 480p, and 360p choices.
+- A resolution choice means the best available stream at or below that height;
+  yt-dlp falls back to a compatible lower-quality stream when needed.
+- WAV/FLAC remain lossless, so bitrate selection is not applied.
 
 ## Release artifacts
 
