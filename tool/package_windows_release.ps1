@@ -72,7 +72,8 @@ Spull Setup
 
 Double-click Install-Spull.vbs to open the GUI installation wizard.
 The launcher starts Windows PowerShell without opening a console window.
-The installed folder contains Uninstall-Spull.vbs for removing Spull later.
+Uninstall-Spull.vbs removes the default installation; for a custom install
+folder, run the copy inside that installed folder.
 The setup payload includes FFmpeg, so the app does not need to download it
 on its first launch.
 '@ | Set-Content -Path (Join-Path $setupStage "README.txt") -Encoding UTF8

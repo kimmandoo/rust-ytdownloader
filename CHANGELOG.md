@@ -20,6 +20,8 @@
   installed local binaries before downloading replacements.
 - feat(release): added a Windows uninstaller script and Start Menu shortcut
   to remove installed Spull files.
+- fix(release): made the uninstaller resolve setup-folder launches and
+  protected shortcut cleanup from unrelated Spull installations.
 - feat(release): added a guarded publisher script that checked existing tags
   and pushed only the requested release branch and tag.
 - fix(release): documented targeted branch-and-tag pushes so existing local

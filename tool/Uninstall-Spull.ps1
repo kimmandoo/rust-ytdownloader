@@ -35,8 +35,9 @@ function Remove-ShortcutIfTarget(
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($path)
         $targetMatches = $shortcut.TargetPath -ieq $target
+        $shortcutArguments = [string]$shortcut.Arguments
         $argumentsMatch = [string]::IsNullOrWhiteSpace($arguments) -or
-            $shortcut.Arguments.Trim('" ') -ieq $arguments.Trim('" ')
+            $shortcutArguments.Trim('" ') -ieq $arguments.Trim('" ')
         if ($targetMatches -and $argumentsMatch) {
             Remove-Item -LiteralPath $path -Force
         }
@@ -45,9 +46,15 @@ function Remove-ShortcutIfTarget(
     }
 }
 
-$scriptPath = $MyInvocation.MyCommand.Definition
+$scriptPath = $PSCommandPath
+$scriptDirectory = Split-Path -Parent $scriptPath
+$defaultInstallPath = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Spull'
 $installPath = if ([string]::IsNullOrWhiteSpace($RemovePath)) {
-    Split-Path -Parent $scriptPath
+    if (Test-Path -LiteralPath (Join-Path $scriptDirectory 'spull.exe') -PathType Leaf) {
+        $scriptDirectory
+    } else {
+        $defaultInstallPath
+    }
 } else {
     [System.IO.Path]::GetFullPath($RemovePath)
 }
@@ -56,6 +63,7 @@ $shortcutPath = Join-Path $programs 'Spull.lnk'
 $wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
 $uninstallShortcutPath = Join-Path $programs 'Uninstall Spull.lnk'
 $executable = Join-Path $installPath 'spull.exe'
+$uninstaller = Join-Path $installPath 'Uninstall-Spull.vbs'
 
 if ([string]::IsNullOrWhiteSpace($RemovePath)) {
     if (-not (Test-Path -LiteralPath $installPath -PathType Container)) {
@@ -108,12 +116,19 @@ if ([string]::IsNullOrWhiteSpace($RemovePath)) {
 }
 
 try {
+    if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
+        throw 'The Spull executable is missing from the installation folder.'
+    }
+
     Get-Process -Name 'spull' -ErrorAction SilentlyContinue | ForEach-Object {
         try {
             if ($_.Path -eq $executable) {
                 $_.CloseMainWindow() | Out-Null
                 Start-Sleep -Milliseconds 500
-                if (-not $_.HasExited) { $_.Kill() }
+                if (-not $_.HasExited) {
+                    $_.Kill()
+                    $_.WaitForExit(3000)
+                }
             }
         } catch {
             # A process that has already exited needs no further action.
@@ -125,9 +140,7 @@ try {
         -path $uninstallShortcutPath `
         -target $wscript `
         -arguments $uninstaller
-    if (Test-Path -LiteralPath $installPath) {
-        Remove-Item -LiteralPath $installPath -Recurse -Force
-    }
+    Remove-Item -LiteralPath $installPath -Recurse -Force
 
     Show-Message `
         'Spull was uninstalled successfully.' `
