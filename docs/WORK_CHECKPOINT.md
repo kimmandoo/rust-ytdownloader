@@ -1,8 +1,7 @@
 # Work checkpoint
 
-- Active task: Published the audio/video quality and download status UI
-  release as v1.2.5.
-- Next action: Confirm the `release-v1.2.5` GitHub Actions run.
+- Active task: Completed v1.2.5 release publication and CI verification.
+- Next action: No follow-up action; wait for the next requested task.
 - Changed files: `lib/models/media_models.dart`, `lib/state/app_controller.dart`,
   `lib/services/spull_backend.dart`, `lib/home_page.dart`,
   `lib/widgets/pixel_widgets.dart`, `test/widget_test.dart`, `README.md`,
@@ -15,7 +14,7 @@
   keeps a visible track at zero progress; long status messages wrap to two
   lines.
 - Release state: `release-v1.2.5` points to `9a63264` and was pushed with
-  `main` to `origin`; the release workflow is pending inspection.
+  `main` to `origin`; GitHub Actions run #53 completed successfully.
 - Verification:
   - `dart run tool/verify.dart` passed formatting, analysis, and all widget
     tests after the status-bar repair and no-shell launch adjustment.
