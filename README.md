@@ -57,9 +57,10 @@ Windows releases provide two options:
 - `spull-windows-x86_64.zip`: portable bundle; extract the full archive and run
   `spull.exe`.
 - `spull-windows-x86_64-setup.zip`: antivirus-safe GUI installer bundle;
-  extract it and double-click `Install-Spull.vbs`. The wizard installs Spull
-  under `%LOCALAPPDATA%\Spull`, creates a Start Menu shortcut, and can launch
-  the app.
+  extract it and double-click `Install-Spull.vbs`. The setup payload includes
+  Windows FFmpeg, so the first launch does not wait for an FFmpeg download.
+  The wizard installs Spull under `%LOCALAPPDATA%\Spull`, creates a Start Menu
+  shortcut, and can launch the app.
 
 The macOS Release configuration uses `CODE_SIGN_IDENTITY = -` and disables provisioning-profile requirements, producing an ad-hoc signed app suitable for local distribution. It is not notarized and cannot be used as a Mac App Store submission. See [`macos/ExportOptions.plist`](macos/ExportOptions.plist).
 
@@ -75,20 +76,23 @@ artifacts.
 The CI build validates the platform executable together with its Flutter
 runtime files before packaging. Windows archives place `spull.exe`,
 `flutter_windows.dll`, plugin DLLs, and `data/` at the archive root; extract the
-whole archive before launching the app.
+whole archive before launching the app. The setup archive additionally places
+`ffmpeg.exe` under `bin/` in the installed runtime.
 
 The Windows release job publishes the portable ZIP and a script-based GUI setup
 bundle instead of an unsigned custom setup executable.
 
 ### Dependency locations
 
-Spull checks app-local binaries first and then falls back to the system `PATH`:
+Spull checks binaries in this order:
 
-- Linux: `~/.config/Spull/bin`
-- macOS: `~/Library/Application Support/Spull/bin`
-- Windows: `%LOCALAPPDATA%/Spull/bin`
+1. `%LOCALAPPDATA%/Spull/bin` (downloaded tools; retained between launches)
+2. `bin/` beside the installed `spull.exe` (including FFmpeg from the setup ZIP)
+3. The system `PATH`
 
-Settings are stored as JSON in the platform's Spull application-data folder.
+If FFmpeg is absent or unusable, Spull downloads it once into the first
+location and reuses that copy on later launches. Settings are stored as JSON in
+the platform's Spull application-data folder.
 
 ## Legal Disclaimer
 

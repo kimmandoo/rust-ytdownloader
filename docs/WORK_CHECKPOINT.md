@@ -1,31 +1,23 @@
 # Work checkpoint
 
-- Active task: Replaced the unsigned custom Windows setup EXE with an
-  antivirus-safe script-based GUI setup bundle and triggered the corrected run.
-- Next action: Inspect completed run `33984730323` and the published assets.
-- Changed files: `.github/workflows/release.yml`,
-  `tool/package_windows_release.ps1`, `tool/Install-Spull.ps1`,
-  `tool/Install-Spull.vbs`, README, changelog, and this checkpoint.
-- CI result: Windows releases now publish the portable ZIP plus
-  `spull-windows-x86_64-setup.zip`; users extract it and double-click the
-  hidden PowerShell launcher to open the GUI installer without a custom EXE.
-- Catalog result: The support panel runs `yt-dlp --list-extractors`, displays
-  every returned extractor in a scrollable list, supports case-insensitive
-  search, and carries `(CURRENTLY BROKEN)` markers into the UI status.
+- Active task: Reduced the Windows setup first-launch delay by bundling the
+  FFmpeg executable in the setup runtime and making the backend reuse installed
+  binaries.
+- Next action: Commit this completed change; no blockers remain.
+- Changed files: `lib/services/spull_backend.dart`,
+  `tool/package_windows_release.ps1`, `README.md`, `CHANGELOG.md`, and this
+  checkpoint.
+- Runtime behavior: The setup payload now contains `bin/ffmpeg.exe`. Spull
+  checks `%LOCALAPPDATA%/Spull/bin`, then `bin/` beside the app executable, then
+  `PATH`; an absent or unusable FFmpeg is downloaded once into the persistent
+  app-data bin directory.
 - Verification:
-  - Live extractor smoke loaded 1,751 entries from the installed yt-dlp binary
-    and preserved 136 broken statuses.
   - `dart run tool/verify.dart` passed: formatting, Flutter analyzer, and all
     widget tests passed.
-  - A clean Windows release build passed, then
-    `dart run tool/verify_desktop_artifact.dart windows` found the executable,
-    Flutter DLL, engine data, and asset manifest.
-  - The setup package now contains `Install-Spull.vbs`,
-    `Install-Spull.ps1`, and the complete runtime ZIP.
-  - The VBS launcher starts Windows PowerShell hidden; the installer itself
-    presents the folder, shortcut, progress, completion, and error dialogs.
-  - Portable ZIP and setup ZIP packaging passed locally.
-  - `dart run tool/verify.dart` passed: formatting, analyzer, and widget tests.
   - `dart run tool/verify_desktop_artifact.dart windows` passed.
-  - Release workflow YAML parsed successfully and `git diff --check` passed.
-- GitHub Actions run `33984730323` is queued for tag `release-v1.2.0`.
+  - Windows PowerShell parser accepted `tool/package_windows_release.ps1`.
+  - Local Windows packaging passed and produced portable plus setup ZIPs.
+  - Nested `spull-runtime.zip` contains `bin/ffmpeg.exe` (102,856,192 bytes
+    uncompressed); portable ZIP remains FFmpeg-free.
+  - `git diff --check` passed.
+- Blockers: None.

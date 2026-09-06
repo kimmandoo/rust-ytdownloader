@@ -16,7 +16,8 @@
   without a console window.
 - fix(release): replaced the unsigned custom setup EXE with a script-based GUI
   setup ZIP to avoid antivirus quarantine of the self-extracting binary.
-
+- fix(release): bundled Windows FFmpeg in the setup payload and reused
+  installed local binaries before downloading replacements.
 - feat(spull): migrated the desktop downloader to Dart and Flutter.
 - fix(media): embedded high-quality center-cropped square album art into audio exports without sidecar images.
 - refactor(ui): removed mascot-themed copy and decorative blocks, then clarified the light logo-derived dashboard hierarchy.

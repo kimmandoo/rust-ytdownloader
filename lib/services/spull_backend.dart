@@ -160,6 +160,7 @@ class SpullBackend {
         ),
       );
 
+      final ffmpegWasInstalled = _installedExecutablePath('ffmpeg') != null;
       var ffmpegReady = await _commandWorks(ffmpegExecutable, const [
         '-version',
       ]);
@@ -181,6 +182,14 @@ class SpullBackend {
           );
           return;
         }
+      } else if (ffmpegWasInstalled) {
+        events.add(
+          const InitEvent(
+            kind: InitKind.checking,
+            message: '기존 ffmpeg 설치본을 재사용합니다.',
+            percent: 72,
+          ),
+        );
       }
       if (!ffmpegReady) {
         events.add(
@@ -416,22 +425,31 @@ class SpullBackend {
     return 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-$suffix-static.tar.xz';
   }
 
+  String? _installedExecutablePath(String toolName) {
+    final localName = Platform.isWindows ? '$toolName.exe' : toolName;
+    final candidates = <String>[
+      p.join(binDirectory.path, localName),
+      p.join(File(Platform.resolvedExecutable).parent.path, 'bin', localName),
+    ];
+    for (final candidate in candidates) {
+      if (File(candidate).existsSync()) return candidate;
+    }
+    return null;
+  }
+
   String get ytdlpExecutable {
     final localName = Platform.isWindows ? 'yt-dlp.exe' : 'yt-dlp';
-    final local = File(p.join(binDirectory.path, localName));
-    return local.existsSync() ? local.path : localName;
+    return _installedExecutablePath('yt-dlp') ?? localName;
   }
 
   String get ffmpegExecutable {
     final localName = Platform.isWindows ? 'ffmpeg.exe' : 'ffmpeg';
-    final local = File(p.join(binDirectory.path, localName));
-    return local.existsSync() ? local.path : localName;
+    return _installedExecutablePath('ffmpeg') ?? localName;
   }
 
   String get denoExecutable {
     final localName = Platform.isWindows ? 'deno.exe' : 'deno';
-    final local = File(p.join(binDirectory.path, localName));
-    return local.existsSync() ? local.path : localName;
+    return _installedExecutablePath('deno') ?? localName;
   }
 
   Future<PlaylistInfo> analyzeUrl({
